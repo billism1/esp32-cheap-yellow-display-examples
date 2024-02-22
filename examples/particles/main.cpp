@@ -2,7 +2,7 @@
 #include <math.h>
 #include <SPI.h>
 #include <XPT2046_Touchscreen.h>
-#include <TFT_eSPI.h> // Need to use the modified TFT library provided in this project.
+#include <TFT_eSPI.h>
 
 #define XPT2046_IRQ 36
 #define XPT2046_MOSI 32
