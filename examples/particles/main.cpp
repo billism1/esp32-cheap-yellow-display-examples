@@ -10,6 +10,7 @@
 #define XPT2046_CLK 25
 #define XPT2046_CS 33
 
+// The following min/max axis values were gathered through empirical data gathering on the specific board I have.
 #define TS_MINX 280
 #define TS_MAXX 3750
 #define TS_MINY 280
