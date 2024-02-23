@@ -11,4 +11,4 @@ I made the following changes:
     - to:
     - SPIClass mySpi = SPIClass(VSPI);
     - Because HSPI did not work for the board I have.
-- I converted this to a Platform.io for ease of use.
+- I converted this to a Platform.io project for easy dependency management.
