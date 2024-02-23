@@ -5,7 +5,6 @@
 #include <Arduino.h>
 #include <XPT2046_Touchscreen.h>
 #include <TFT_eSPI.h>
-#include "pin_config.h"
 
 #define XPT2046_IRQ 36
 #define XPT2046_MOSI 32

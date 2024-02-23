@@ -1,4 +1,4 @@
-## Particles Example
+# Particles Example
 
 The particles example was "manually forked" from the following GitHub repo:
 https://github.com/doctorpartlow/esp32s3lilygoanimations/blob/main/particles.ino
