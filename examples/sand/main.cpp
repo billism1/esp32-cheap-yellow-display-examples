@@ -50,6 +50,7 @@ uint16_t color = red << 11;
 int16_t inputX = -1;
 int16_t inputY = -1;
 
+// Keys here are a concat of the 16 bit x/y values into a single 32 bit value for more efficient storage. I guess I'm too lazy to make a struct?
 std::unordered_map<uint32_t, uint16_t> pixelColors;    // [X,Y]:[COLOR]
 std::unordered_map<uint32_t, uint8_t> pixelStates;     // [X,Y]:[STATE]
 std::unordered_map<uint32_t, uint8_t> pixelVelocities; // [X,Y]:[VELOCITY]
@@ -241,7 +242,9 @@ void loop()
           uint16_t xCol = inputX + i;
           uint16_t yRow = inputY + j;
 
+          // Concat the 16 bit x/y values into a single 32 bit value for more efficient storage.
           uint32_t xy = ((uint32_t)xCol << 16) | (uint32_t)yRow;
+
           if (withinNativeCols(xCol) && withinNativeRows(yRow) && pixelStates.find(xy) == pixelStates.end())
           {
             pixelColors[xy] = color;
@@ -262,7 +265,7 @@ void loop()
     setNextColor();
   }
 
-  std::unordered_set<uint32_t> pixelsToErase;
+  std::unordered_set<uint32_t> pixelsToErase;                 // [X,Y]
   std::unordered_map<uint32_t, uint16_t> pixelColorsToAdd;    // [X,Y]:[COLOR]
   std::unordered_map<uint32_t, uint8_t> pixelStatesToAdd;     // [X,Y]:[STATE]
   std::unordered_map<uint32_t, uint8_t> pixelVelocitiesToAdd; // [X,Y]:[VELOCITY]
@@ -273,6 +276,8 @@ void loop()
   {
     auto keyVal = *stateIter;
     auto pixelKey = keyVal.first;
+
+    // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
     uint16_t pixelXCol = (uint16_t)((pixelKey & 0xFFFF0000) >> 16);
     uint16_t pixelYRow = (uint16_t)(pixelKey & 0x0000FFFF);
 
@@ -296,7 +301,7 @@ void loop()
         continue;
       }
 
-      uint32_t belowXY = ((uint32_t)pixelXCol << 16) | (uint32_t)yRowPos;
+      uint32_t belowXY = ((uint32_t)pixelXCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
 
       int16_t direction = 1;
       if (random(100) < 50)
@@ -309,13 +314,11 @@ void loop()
 
       if (withinScaledCols(pixelXCol + direction))
       {
-        // belowStateA = stateGrid[y][j + direction];
-        belowXY_A = ((uint32_t)(pixelXCol + direction) << 16) | (uint32_t)yRowPos;
+        belowXY_A = ((uint32_t)(pixelXCol + direction) << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
       }
       if (withinScaledCols(pixelXCol - direction))
       {
-        // belowStateB = stateGrid[y][j - direction];
-        belowXY_B = ((uint32_t)(pixelXCol - direction) << 16) | (uint32_t)yRowPos;
+        belowXY_B = ((uint32_t)(pixelXCol - direction) << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
       }
 
       if (withinScaledRows(yRowPos) &&
