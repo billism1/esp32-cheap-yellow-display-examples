@@ -57,7 +57,7 @@ static const uint8_t GRID_STATE_COMPLETE = 3;
 unsigned long maxFps = 30;
 long lastMillis = 0;
 int fps = 0;
-char fpsStringBuffer[16];
+char fpsStringBuffer[32];
 
 bool withinCols(uint16_t value)
 {
@@ -196,6 +196,30 @@ void setNextColor()
 //   }
 // }
 
+void drawScaledPixel(uint16_t x, uint16_t y, uint16_t color)
+{
+  uint16_t scaledXCol = x * PIXEL_WIDTH;
+  uint16_t scaledYRow = y * PIXEL_WIDTH;
+
+  // TODO: The below is hard-coded for a PIXEL_WIDTH of 4. Make dynaminc.
+  tft.drawPixel(scaledXCol, scaledYRow, color);
+  tft.drawPixel(scaledXCol, scaledYRow + 1, color);
+  tft.drawPixel(scaledXCol, scaledYRow + 2, color);
+  tft.drawPixel(scaledXCol, scaledYRow + 3, color);
+  tft.drawPixel(scaledXCol + 1, scaledYRow, color);
+  tft.drawPixel(scaledXCol + 1, scaledYRow + 1, color);
+  tft.drawPixel(scaledXCol + 1, scaledYRow + 2, color);
+  tft.drawPixel(scaledXCol + 1, scaledYRow + 3, color);
+  tft.drawPixel(scaledXCol + 2, scaledYRow, color);
+  tft.drawPixel(scaledXCol + 2, scaledYRow + 1, color);
+  tft.drawPixel(scaledXCol + 2, scaledYRow + 2, color);
+  tft.drawPixel(scaledXCol + 2, scaledYRow + 3, color);
+  tft.drawPixel(scaledXCol + 3, scaledYRow, color);
+  tft.drawPixel(scaledXCol + 3, scaledYRow + 1, color);
+  tft.drawPixel(scaledXCol + 3, scaledYRow + 2, color);
+  tft.drawPixel(scaledXCol + 3, scaledYRow + 3, color);
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -277,9 +301,23 @@ void loop()
   sprintf(fpsStringBuffer, "fps: %lu", fps);
 
   // Display frame rate
-  tft.fillRect(1, 1, 75, 10, TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(fpsStringBuffer, 1, 1);
+  tft.drawString(fpsStringBuffer, 0, 0);
+
+  memset(fpsStringBuffer, 0x00, sizeof(fpsStringBuffer));
+  uint32_t psramSize = ESP.getPsramSize();
+  uint32_t freePsram = ESP.getFreePsram();
+  sprintf(fpsStringBuffer, "psram: %u / %u", freePsram, psramSize);
+  tft.drawString(fpsStringBuffer, 0, 10);
+
+  uint32_t heapSize = ESP.getHeapSize();
+  uint32_t freeHeap = ESP.getFreeHeap();
+  sprintf(fpsStringBuffer, "heap: %u / %u", freeHeap, heapSize);
+  tft.drawString(fpsStringBuffer, 0, 20);
+
+  uint32_t minFreeHeap = ESP.getMinFreeHeap();
+  sprintf(fpsStringBuffer, "min free heap: %u", minFreeHeap);
+  tft.drawString(fpsStringBuffer, 0, 30);
 
   // Throttle FPS
   unsigned long diffMillis = currentMillis - lastMillis;
@@ -298,7 +336,7 @@ void loop()
     inputX = map(p.x, TS_MINX, TS_MAXX, 0, COLS);
     inputY = map(p.y, TS_MINY, TS_MAXY, 0, ROWS); // Needs flipping this axis for some reason.
 
-    //tft.drawCircle(inputY, inputX, 6, TFT_SKYBLUE);
+    // tft.drawCircle(inputY, inputX, 6, TFT_SKYBLUE);
   }
 
   // Randomly add an area of pixels
@@ -310,22 +348,24 @@ void loop()
     {
       if (random(100) < percentInputFill)
       {
-        uint16_t col = inputX + i;
-        uint16_t row = inputY + j;
+        uint16_t xCol = inputX + i;
+        uint16_t yRow = inputY + j;
 
-        uint32_t xy = ((uint32_t)col << 16) | (uint32_t)row;
-        // Serial.print("col: ");
-        // Serial.println(col);
-        // Serial.print("row: ");
-        // Serial.println(row);
+        uint32_t xy = ((uint32_t)xCol << 16) | (uint32_t)yRow;
+        // Serial.print("xCol: ");
+        // Serial.println(xCol);
+        // Serial.print("yRow: ");
+        // Serial.println(yRow);
         // Serial.print("xy: ");
         // Serial.println(xy);
 
-        if (withinCols(col) && withinRows(row) && pixelState.find(xy) == pixelState.end())
+        if (withinCols(xCol) && withinRows(yRow) && pixelState.find(xy) == pixelState.end())
         {
           pixelColor[xy] = color;
           pixelState[xy] = GRID_STATE_NEW;
           pixelVelocity[xy] = (uint8_t)1;
+
+          drawScaledPixel(xCol, yRow, color);
         }
       }
     }
@@ -334,7 +374,7 @@ void loop()
   // Change the color of the pixels over time
   if (colorChangeTime < millis())
   {
-    //Serial.println("Changing color...");
+    // Serial.println("Changing color...");
     colorChangeTime = millis() + 750;
     setNextColor();
   }
@@ -359,9 +399,11 @@ void loop()
   // Serial.println("Drawing pixels...");
   // Serial.print(pixelColor.size());
   // Serial.println(" pixels to draw...");
-  //for (std::unordered_map<uint32_t, uint16_t>::iterator iter = pixelColor.begin(); iter != pixelColor.end(); iter++)
-  for (const auto& keyVal: pixelColor)
+  // for (std::unordered_map<uint32_t, uint16_t>::iterator iter = pixelColor.begin(); iter != pixelColor.end(); iter++)
+  for (const auto &keyVal : pixelColor)
   {
+    // if (pixelState[keyVal.first] == GRID_STATE_FALLING)
+
     uint16_t xCol = (uint16_t)((keyVal.first & 0xFFFF0000) >> 16);
     uint16_t yRow = (uint16_t)(keyVal.first & 0x0000FFFF);
     uint16_t color = keyVal.second;
@@ -372,27 +414,6 @@ void loop()
     // Serial.print(yRow);
     // Serial.print(": ");
     // Serial.println(color);
-
-    uint16_t scaledXCol = xCol * PIXEL_WIDTH;
-    uint16_t scaledYRow = yRow * PIXEL_WIDTH;
-
-    // TODO: The below is hard-coded for a PIXEL_WIDTH of 4. Make dynaminc.
-    tft.drawPixel(scaledXCol, scaledYRow, color);
-    tft.drawPixel(scaledXCol, scaledYRow + 1, color);
-    tft.drawPixel(scaledXCol, scaledYRow + 2, color);
-    tft.drawPixel(scaledXCol, scaledYRow + 3, color);
-    tft.drawPixel(scaledXCol + 1, scaledYRow, color);
-    tft.drawPixel(scaledXCol + 1, scaledYRow + 1, color);
-    tft.drawPixel(scaledXCol + 1, scaledYRow + 2, color);
-    tft.drawPixel(scaledXCol + 1, scaledYRow + 3, color);
-    tft.drawPixel(scaledXCol + 2, scaledYRow, color);
-    tft.drawPixel(scaledXCol + 2, scaledYRow + 1, color);
-    tft.drawPixel(scaledXCol + 2, scaledYRow + 2, color);
-    tft.drawPixel(scaledXCol + 2, scaledYRow + 3, color);
-    tft.drawPixel(scaledXCol + 3, scaledYRow, color);
-    tft.drawPixel(scaledXCol + 3, scaledYRow + 1, color);
-    tft.drawPixel(scaledXCol + 3, scaledYRow + 2, color);
-    tft.drawPixel(scaledXCol + 3, scaledYRow + 3, color);
   }
 
   // for (int16_t i = 0; i < ROWS; i = ++i)
