@@ -19,9 +19,21 @@
 #define TS_MINY 280
 #define TS_MAXY 3750
 
-static const int8_t PIXEL_WIDTH = 4;
-static const int16_t ROWS = 240 / PIXEL_WIDTH;
-static const int16_t COLS = 320 / PIXEL_WIDTH;
+/////////////////////////////////////////////////////
+// You can adjust the following "subjective" params:
+static const int8_t PIXEL_WIDTH = 3;
+uint8_t percentInputFill = 20;
+uint8_t inputWidth = 6;
+uint8_t gravity = 1;
+unsigned long maxFps = 30;
+unsigned long colorChangeTime = 0;
+// End "subjective" params.
+/////////////////////////////////////////////////////
+
+static const int16_t NATIVE_ROWS = 240;
+static const int16_t NATIVE_COLS = 320;
+static const int16_t SCALED_ROWS = NATIVE_ROWS / PIXEL_WIDTH;
+static const int16_t SCALED_COLS = NATIVE_COLS / PIXEL_WIDTH;
 
 int16_t BACKGROUND_COLOR = TFT_BLACK;
 
@@ -34,46 +46,41 @@ byte green = 0;
 byte blue = 0;
 byte colorState = 0;
 uint16_t color = red << 11;
-unsigned long colorChangeTime = 0;
 
-uint8_t gravity = 1;
-uint8_t percentInputFill = 10;
-uint8_t adjacentVelocityResetValue = 3;
+int16_t inputX = -1;
+int16_t inputY = -1;
 
-uint8_t inputWidth = 5;
-uint16_t inputX = COLS / 2;
-uint16_t inputY = 10;
+std::unordered_map<uint32_t, uint16_t> pixelColors;    // [X,Y]:[COLOR]
+std::unordered_map<uint32_t, uint8_t> pixelStates;     // [X,Y]:[STATE]
+std::unordered_map<uint32_t, uint8_t> pixelVelocities; // [X,Y]:[VELOCITY]
+std::unordered_set<uint32_t> landedPixels;             // [X,Y]
 
-std::unordered_map<uint32_t, uint16_t> pixelColor;   // [X,Y]:[COLOR]
-std::unordered_map<uint32_t, uint8_t> pixelState;    // [X,Y]:[STATE]
-std::unordered_map<uint32_t, uint8_t> pixelVelocity; // [X,Y]:[VELOCITY]
-
-// static const int8_t GRID_STATE_NONE = 0;
 static const uint8_t GRID_STATE_NEW = 1;
 static const uint8_t GRID_STATE_FALLING = 2;
-static const uint8_t GRID_STATE_COMPLETE = 3;
 
-// Maximum frames per second.
-unsigned long maxFps = 30;
 long lastMillis = 0;
 int fps = 0;
 char fpsStringBuffer[32];
 
-bool withinCols(uint16_t value)
+bool withinNativeCols(int16_t value)
 {
-  return value >= 0 && value <= COLS - 1;
+  return value >= 0 && value <= NATIVE_COLS - 1;
 }
 
-bool withinRows(uint16_t value)
+bool withinNativeRows(int16_t value)
 {
-  return value >= 0 && value <= ROWS - 1;
+  return value >= 0 && value <= NATIVE_ROWS - 1;
 }
 
-// bool isWithinInputArea(int16_t x, int16_t y)
-// {
-//   long halfInputWidthPlusThree = (inputWidth / 2) + 3;
-//   return x > (inputX - halfInputWidthPlusThree) && x < (inputX + halfInputWidthPlusThree) && y > (inputY - halfInputWidthPlusThree) && y < (inputY + halfInputWidthPlusThree);
-// }
+bool withinScaledCols(int16_t value)
+{
+  return value >= 0 && value <= SCALED_COLS - 1;
+}
+
+bool withinScaledRows(int16_t value)
+{
+  return value >= 0 && value <= SCALED_ROWS - 1;
+}
 
 // Color changing state machine
 void setNextColor()
@@ -136,142 +143,24 @@ void setNextColor()
     color++;
 }
 
-// void resetAdjacentPixels(int16_t x, int16_t y)
-// {
-//   int16_t xPlus = x + 1;
-//   int16_t xMinus = x - 1;
-//   int16_t yPlus = y + 1;
-//   int16_t yMinus = y - 1;
-
-//   // Row above
-//   if (withinRows(yMinus))
-//   {
-//     if (nextStateGrid[yMinus][xMinus] == GRID_STATE_COMPLETE)
-//     {
-//       nextStateGrid[yMinus][xMinus] = GRID_STATE_FALLING;
-//       nextVelocityGrid[yMinus][xMinus] = adjacentVelocityResetValue;
-//     }
-//     if (nextStateGrid[yMinus][x] == GRID_STATE_COMPLETE)
-//     {
-//       nextStateGrid[yMinus][x] = GRID_STATE_FALLING;
-//       nextVelocityGrid[yMinus][x] = adjacentVelocityResetValue;
-//     }
-//     if (nextStateGrid[yMinus][xPlus] == GRID_STATE_COMPLETE)
-//     {
-//       nextStateGrid[yMinus][xPlus] = GRID_STATE_FALLING;
-//       nextVelocityGrid[yMinus][xPlus] = adjacentVelocityResetValue;
-//     }
-//   }
-
-//   // Current row
-//   if (nextStateGrid[y][xMinus] == GRID_STATE_COMPLETE)
-//   {
-//     nextStateGrid[y][xMinus] = GRID_STATE_FALLING;
-//     nextVelocityGrid[y][xMinus] = adjacentVelocityResetValue;
-//   }
-//   if (nextStateGrid[y][xPlus] == GRID_STATE_COMPLETE)
-//   {
-//     nextStateGrid[y][xPlus] = GRID_STATE_FALLING;
-//     nextVelocityGrid[y][xPlus] = adjacentVelocityResetValue;
-//   }
-
-//   // Row below
-//   if (withinRows(yPlus))
-//   {
-//     if (nextStateGrid[yPlus][xMinus] == GRID_STATE_COMPLETE)
-//     {
-//       nextStateGrid[yPlus][xMinus] = GRID_STATE_FALLING;
-//       nextVelocityGrid[yPlus][xMinus] = adjacentVelocityResetValue;
-//     }
-//     if (nextStateGrid[yPlus][x] == GRID_STATE_COMPLETE)
-//     {
-//       nextStateGrid[yPlus][x] = GRID_STATE_FALLING;
-//       nextVelocityGrid[yPlus][x] = adjacentVelocityResetValue;
-//     }
-//     if (nextStateGrid[yPlus][xPlus] == GRID_STATE_COMPLETE)
-//     {
-//       nextStateGrid[yPlus][xPlus] = GRID_STATE_FALLING;
-//       nextVelocityGrid[yPlus][xPlus] = adjacentVelocityResetValue;
-//     }
-//   }
-// }
-
-void drawScaledPixel(uint16_t x, uint16_t y, uint16_t color)
+// Scale pixel and then draw it.
+void drawScaledPixel(int16_t x, int16_t y, uint16_t color)
 {
-  uint16_t scaledXCol = x * PIXEL_WIDTH;
-  uint16_t scaledYRow = y * PIXEL_WIDTH;
+  // Scale
+  int16_t scaledXCol = x * PIXEL_WIDTH;
+  int16_t scaledYRow = y * PIXEL_WIDTH;
 
-  // TODO: The below is hard-coded for a PIXEL_WIDTH of 4. Make dynaminc.
-  tft.drawPixel(scaledXCol, scaledYRow, color);
-  tft.drawPixel(scaledXCol, scaledYRow + 1, color);
-  tft.drawPixel(scaledXCol, scaledYRow + 2, color);
-  tft.drawPixel(scaledXCol, scaledYRow + 3, color);
-  tft.drawPixel(scaledXCol + 1, scaledYRow, color);
-  tft.drawPixel(scaledXCol + 1, scaledYRow + 1, color);
-  tft.drawPixel(scaledXCol + 1, scaledYRow + 2, color);
-  tft.drawPixel(scaledXCol + 1, scaledYRow + 3, color);
-  tft.drawPixel(scaledXCol + 2, scaledYRow, color);
-  tft.drawPixel(scaledXCol + 2, scaledYRow + 1, color);
-  tft.drawPixel(scaledXCol + 2, scaledYRow + 2, color);
-  tft.drawPixel(scaledXCol + 2, scaledYRow + 3, color);
-  tft.drawPixel(scaledXCol + 3, scaledYRow, color);
-  tft.drawPixel(scaledXCol + 3, scaledYRow + 1, color);
-  tft.drawPixel(scaledXCol + 3, scaledYRow + 2, color);
-  tft.drawPixel(scaledXCol + 3, scaledYRow + 3, color);
+  for (uint16_t i = 0; i < PIXEL_WIDTH; i++)
+  {
+    for (uint16_t j = 0; j < PIXEL_WIDTH; j++)
+    {
+      tft.drawPixel(scaledXCol + i, scaledYRow + j, color);
+    }
+  }
 }
 
 void setup()
 {
-  Serial.begin(115200);
-  Serial.println("Hello, starting...");
-
-  Serial.println("Reserving pixel state memory...");
-  pixelColor.reserve(COLS * ROWS);
-
-  // // Serial.println("Creating grids...");
-  // grid = new int16_t *[ROWS];
-  // nextGrid = new int16_t *[ROWS];
-  // lastGrid = new int16_t *[ROWS];
-
-  // velocityGrid = new int16_t *[ROWS];
-  // nextVelocityGrid = new int16_t *[ROWS];
-  // lastVelocityGrid = new int16_t *[ROWS];
-
-  // stateGrid = new int16_t *[ROWS];
-  // nextStateGrid = new int16_t *[ROWS];
-  // lastStateGrid = new int16_t *[ROWS];
-
-  // // Serial.println("Clearing grids...");
-  // for (int16_t i = 0; i < ROWS; ++i)
-  // {
-  //   grid[i] = new int16_t[COLS];
-  //   nextGrid[i] = new int16_t[COLS];
-  //   lastGrid[i] = new int16_t[COLS];
-
-  //   velocityGrid[i] = new int16_t[COLS];
-  //   nextVelocityGrid[i] = new int16_t[COLS];
-  //   lastVelocityGrid[i] = new int16_t[COLS];
-
-  //   stateGrid[i] = new int16_t[COLS];
-  //   nextStateGrid[i] = new int16_t[COLS];
-  //   lastStateGrid[i] = new int16_t[COLS];
-
-  //   for (int16_t j = 0; j < COLS; ++j)
-  //   {
-  //     grid[i][j] = BACKGROUND_COLOR;
-  //     nextGrid[i][j] = BACKGROUND_COLOR;
-  //     lastGrid[i][j] = BACKGROUND_COLOR;
-
-  //     velocityGrid[i][j] = 0;
-  //     nextVelocityGrid[i][j] = 0;
-  //     lastVelocityGrid[i][j] = 0;
-
-  //     stateGrid[i][j] = GRID_STATE_NONE;
-  //     nextStateGrid[i][j] = GRID_STATE_NONE;
-  //     lastStateGrid[i][j] = GRID_STATE_NONE;
-  //   }
-  // }
-
   // Start the SPI for the touch screen and init the TS library
   Serial.println("Init display...");
   mySpi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
@@ -285,16 +174,19 @@ void setup()
 
   colorChangeTime = millis() + 1000;
 
-  delay(2000);
+  delay(500);
 }
 
 void loop()
 {
-  Serial.println("Looping...");
-
-  // delay(50);
-
   unsigned long currentMillis = millis();
+
+  // Throttle FPS
+  unsigned long diffMillis = currentMillis - lastMillis;
+  if ((1000 / maxFps) > diffMillis)
+  {
+    return;
+  }
 
   // Get frame rate.
   fps = 1000 / max(currentMillis - lastMillis, (unsigned long)1);
@@ -302,6 +194,7 @@ void loop()
 
   // Display frame rate
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  //tft.fillRect(0, 0, 65, 10, BACKGROUND_COLOR);
   tft.drawString(fpsStringBuffer, 0, 0);
 
   memset(fpsStringBuffer, 0x00, sizeof(fpsStringBuffer));
@@ -319,13 +212,6 @@ void loop()
   sprintf(fpsStringBuffer, "min free heap: %u", minFreeHeap);
   tft.drawString(fpsStringBuffer, 0, 30);
 
-  // Throttle FPS
-  unsigned long diffMillis = currentMillis - lastMillis;
-  if ((1000 / maxFps) > diffMillis)
-  {
-    return;
-  }
-
   lastMillis = currentMillis;
 
   // Handle touch.
@@ -333,39 +219,37 @@ void loop()
   {
     TS_Point p = ts.getPoint();
 
-    inputX = map(p.x, TS_MINX, TS_MAXX, 0, COLS);
-    inputY = map(p.y, TS_MINY, TS_MAXY, 0, ROWS); // Needs flipping this axis for some reason.
-
-    // tft.drawCircle(inputY, inputX, 6, TFT_SKYBLUE);
+    inputX = map(p.x, TS_MINX, TS_MAXX, 0, SCALED_COLS);
+    inputY = map(p.y, TS_MINY, TS_MAXY, 0, SCALED_ROWS);
+  }
+  else
+  {
+    inputX = -1;
+    inputY = -1;
   }
 
-  // Randomly add an area of pixels
-  Serial.println("Adding pixels...");
-  int16_t halfInputWidth = inputWidth / 2;
-  for (int16_t i = -halfInputWidth; i <= halfInputWidth; ++i)
+  if (withinNativeCols(inputX) && withinNativeRows(inputY))
   {
-    for (int16_t j = -halfInputWidth; j <= halfInputWidth; ++j)
+    // Randomly add an area of pixels
+    int16_t halfInputWidth = inputWidth / 2;
+    for (int16_t i = -halfInputWidth; i <= halfInputWidth; ++i)
     {
-      if (random(100) < percentInputFill)
+      for (int16_t j = -halfInputWidth; j <= halfInputWidth; ++j)
       {
-        uint16_t xCol = inputX + i;
-        uint16_t yRow = inputY + j;
-
-        uint32_t xy = ((uint32_t)xCol << 16) | (uint32_t)yRow;
-        // Serial.print("xCol: ");
-        // Serial.println(xCol);
-        // Serial.print("yRow: ");
-        // Serial.println(yRow);
-        // Serial.print("xy: ");
-        // Serial.println(xy);
-
-        if (withinCols(xCol) && withinRows(yRow) && pixelState.find(xy) == pixelState.end())
+        if (random(100) < percentInputFill)
         {
-          pixelColor[xy] = color;
-          pixelState[xy] = GRID_STATE_NEW;
-          pixelVelocity[xy] = (uint8_t)1;
+          uint16_t xCol = inputX + i;
+          uint16_t yRow = inputY + j;
 
-          drawScaledPixel(xCol, yRow, color);
+          uint32_t xy = ((uint32_t)xCol << 16) | (uint32_t)yRow;
+          if (withinNativeCols(xCol) && withinNativeRows(yRow) && pixelStates.find(xy) == pixelStates.end())
+          {
+            pixelColors[xy] = color;
+            pixelStates[xy] = GRID_STATE_NEW;
+            pixelVelocities[xy] = (uint8_t)1;
+
+            drawScaledPixel(xCol, yRow, color);
+          }
         }
       }
     }
@@ -374,196 +258,149 @@ void loop()
   // Change the color of the pixels over time
   if (colorChangeTime < millis())
   {
-    // Serial.println("Changing color...");
-    colorChangeTime = millis() + 750;
+    colorChangeTime = millis() + 250;
     setNextColor();
   }
 
-  // DEBUG
-  // DEBUG
-  // Serial.println("Array Values:");
-  // for (int16_t i = 0; i < ROWS; ++i)
-  // {
-  //   for (int16_t j = 0; j < COLS; ++j)
-  //   {
-  //     Serial.printf("|%u|", stateGrid[i][j]);
-  //   }
-  //   Serial.println("");
-  // }
-  // DEBUG
-  // DEBUG
+  std::unordered_set<uint32_t> pixelsToErase;
+  std::unordered_map<uint32_t, uint16_t> pixelColorsToAdd;    // [X,Y]:[COLOR]
+  std::unordered_map<uint32_t, uint8_t> pixelStatesToAdd;     // [X,Y]:[STATE]
+  std::unordered_map<uint32_t, uint8_t> pixelVelocitiesToAdd; // [X,Y]:[VELOCITY]
 
-  // unsigned long beforeDraw = millis();
-  // unsigned long pixelsDrawn = 0;
-  // Draw the pixels
-  // Serial.println("Drawing pixels...");
-  // Serial.print(pixelColor.size());
-  // Serial.println(" pixels to draw...");
-  // for (std::unordered_map<uint32_t, uint16_t>::iterator iter = pixelColor.begin(); iter != pixelColor.end(); iter++)
-  for (const auto &keyVal : pixelColor)
+  // Iterate moving pixels and move them as needed.
+  std::unordered_map<uint32_t, uint8_t>::iterator stateIter = pixelStates.begin();
+  while (stateIter != pixelStates.end())
   {
-    // if (pixelState[keyVal.first] == GRID_STATE_FALLING)
+    auto keyVal = *stateIter;
+    auto pixelKey = keyVal.first;
+    uint16_t pixelXCol = (uint16_t)((pixelKey & 0xFFFF0000) >> 16);
+    uint16_t pixelYRow = (uint16_t)(pixelKey & 0x0000FFFF);
 
-    uint16_t xCol = (uint16_t)((keyVal.first & 0xFFFF0000) >> 16);
-    uint16_t yRow = (uint16_t)(keyVal.first & 0x0000FFFF);
-    uint16_t color = keyVal.second;
-
-    // Serial.print("Drawing pixel: ");
-    // Serial.print(xCol);
-    // Serial.print(", ");
-    // Serial.print(yRow);
-    // Serial.print(": ");
-    // Serial.println(color);
-  }
-
-  // for (int16_t i = 0; i < ROWS; i = ++i)
-  // {
-  //   for (int16_t j = 0; j < COLS; j = ++j)
-  //   {
-  //     if (lastGrid == NULL || lastGrid[i][j] != grid[i][j])
-  //     {
-  //       tft.drawPixel(j, i, grid[i][j]);
-  //       // pixelsDrawn++;
-  //     }
-  //   }
-  // }
-  // unsigned long afterDraw = millis();
-  // unsigned long drawTime = afterDraw - beforeDraw;
-  // Serial.printf("%lu pixels drawn in %lu ms.\r\n", pixelsDrawn, drawTime);
-
-  /*
-
-  // Serial.println("Clearing next grids...");
-  // Clear the grids for the next frame of animation
-  for (int16_t i = 0; i < ROWS; ++i)
-  {
-    for (int16_t j = 0; j < COLS; ++j)
+    auto pixelState = keyVal.second;
+    if (pixelState == GRID_STATE_NEW)
     {
-      nextGrid[i][j] = BACKGROUND_COLOR;
-      nextVelocityGrid[i][j] = 0;
-      nextStateGrid[i][j] = GRID_STATE_NONE;
+      pixelStates[pixelKey] = GRID_STATE_FALLING;
+      continue;
     }
-  }
 
-  // Serial.println("Checking every cell...");
-  // unsigned long beforeCheckEveryCell = millis();
-  // unsigned long pixelsChecked = 0;
-  // Check every pixel to see which need moving, and move them.
-  for (int16_t i = 0; i < ROWS; ++i)
-  {
-    for (int16_t j = 0; j < COLS; ++j)
+    auto pixelColor = pixelColors[pixelKey];
+    auto pixelVelocity = pixelVelocities[pixelKey];
+
+    bool moved = false;
+
+    uint16_t newMaxYRowPos = uint16_t(pixelYRow + pixelVelocity);
+    for (int16_t yRowPos = newMaxYRowPos; yRowPos > pixelYRow; yRowPos--)
     {
-      // This nexted loop is where the bulk of the computations occur.
-      // Tread lightly in here, and check as few pixels as needed.
-
-      // Get the state of the current pixel.
-      int16_t pixelColor = grid[i][j];
-      int16_t pixelVelocity = velocityGrid[i][j];
-      int16_t pixelState = stateGrid[i][j];
-
-      bool moved = false;
-
-      // If the current pixel has landed, no need to keep checking for its next move.
-      if (pixelState != GRID_STATE_NONE && pixelState != GRID_STATE_COMPLETE)
+      if (!withinScaledRows(yRowPos))
       {
-        // pixelsChecked++;
-
-        int16_t newPos = int16_t(i + pixelVelocity);
-        for (int16_t y = newPos; y > i; y--)
-        {
-          if (!withinRows(y))
-          {
-            continue;
-          }
-
-          int16_t belowState = stateGrid[y][j];
-          int16_t belowNextState = nextStateGrid[y][j];
-
-          int16_t direction = 1;
-          if (random(100) < 50)
-          {
-            direction *= -1;
-          }
-
-          int16_t belowStateA = -1;
-          int16_t belowNextStateA = -1;
-          int16_t belowStateB = -1;
-          int16_t belowNextStateB = -1;
-
-          if (withinCols(j + direction))
-          {
-            belowStateA = stateGrid[y][j + direction];
-            belowNextStateA = nextStateGrid[y][j + direction];
-          }
-          if (withinCols(j - direction))
-          {
-            belowStateB = stateGrid[y][j - direction];
-            belowNextStateB = nextStateGrid[y][j - direction];
-          }
-
-          if (belowState == GRID_STATE_NONE && belowNextState == GRID_STATE_NONE)
-          {
-            // This pixel will go straight down.
-            nextGrid[y][j] = pixelColor;
-            nextVelocityGrid[y][j] = pixelVelocity + gravity;
-            nextStateGrid[y][j] = GRID_STATE_FALLING;
-            moved = true;
-            break;
-          }
-          else if (belowStateA == GRID_STATE_NONE && belowNextStateA == GRID_STATE_NONE)
-          {
-            // This pixel will fall to side A (right)
-            nextGrid[y][j + direction] = pixelColor;
-            nextVelocityGrid[y][j + direction] = pixelVelocity + gravity;
-            nextStateGrid[y][j + direction] = GRID_STATE_FALLING;
-            moved = true;
-            break;
-          }
-          else if (belowStateB == GRID_STATE_NONE && belowNextStateB == GRID_STATE_NONE)
-          {
-            // This pixel will fall to side B (left)
-            nextGrid[y][j - direction] = pixelColor;
-            nextVelocityGrid[y][j - direction] = pixelVelocity + gravity;
-            nextStateGrid[y][j - direction] = GRID_STATE_FALLING;
-            moved = true;
-            break;
-          }
-        }
+        continue;
       }
 
-      if (moved)
-        resetAdjacentPixels(j, i);
+      uint32_t belowXY = ((uint32_t)pixelXCol << 16) | (uint32_t)yRowPos;
 
-      if (pixelState != GRID_STATE_NONE && !moved)
+      int16_t direction = 1;
+      if (random(100) < 50)
       {
-        nextGrid[i][j] = grid[i][j];
-        nextVelocityGrid[i][j] = velocityGrid[i][j] + gravity;
-        if (pixelState == GRID_STATE_NEW)
-          nextStateGrid[i][j] = GRID_STATE_FALLING;
-        else if (pixelState == GRID_STATE_FALLING && pixelVelocity > 2)
-          nextStateGrid[i][j] = GRID_STATE_COMPLETE;
-        else
-          nextStateGrid[i][j] = pixelState; // should be GRID_STATE_COMPLETE
+        direction *= -1;
+      }
+
+      uint32_t belowXY_A = -1;
+      uint32_t belowXY_B = -1;
+
+      if (withinScaledCols(pixelXCol + direction))
+      {
+        // belowStateA = stateGrid[y][j + direction];
+        belowXY_A = ((uint32_t)(pixelXCol + direction) << 16) | (uint32_t)yRowPos;
+      }
+      if (withinScaledCols(pixelXCol - direction))
+      {
+        // belowStateB = stateGrid[y][j - direction];
+        belowXY_B = ((uint32_t)(pixelXCol - direction) << 16) | (uint32_t)yRowPos;
+      }
+
+      if (withinScaledRows(yRowPos) &&
+          pixelStates.find(belowXY) == pixelStates.end() && landedPixels.find(belowXY) == landedPixels.end())
+      {
+        //  This pixel will go straight down.
+        pixelColorsToAdd[belowXY] = pixelColor;
+        pixelVelocitiesToAdd[belowXY] = pixelVelocity + gravity;
+        pixelStatesToAdd[belowXY] = GRID_STATE_FALLING;
+
+        pixelsToErase.insert(pixelKey);
+
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);
+        drawScaledPixel(pixelXCol, yRowPos, pixelColor);
+
+        moved = true;
+        break;
+      }
+      else if (withinScaledRows(yRowPos) &&
+               pixelStates.find(belowXY_A) == pixelStates.end() && landedPixels.find(belowXY_A) == landedPixels.end())
+      {
+        //  This pixel will fall to side A (right)
+        pixelColorsToAdd[belowXY_A] = pixelColor;
+        pixelVelocitiesToAdd[belowXY_A] = pixelVelocity + gravity;
+        pixelStatesToAdd[belowXY_A] = GRID_STATE_FALLING;
+
+        pixelsToErase.insert(pixelKey);
+
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);
+        drawScaledPixel(pixelXCol + direction, yRowPos, pixelColor);
+
+        moved = true;
+        break;
+      }
+      else if (withinScaledRows(yRowPos) &&
+               pixelStates.find(belowXY_B) == pixelStates.end() && landedPixels.find(belowXY_B) == landedPixels.end())
+      {
+        //  This pixel will fall to side B (left)
+        pixelColorsToAdd[belowXY_B] = pixelColor;
+        pixelVelocitiesToAdd[belowXY_B] = pixelVelocity + gravity;
+        pixelStatesToAdd[belowXY_B] = GRID_STATE_FALLING;
+
+        pixelsToErase.insert(pixelKey);
+
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);
+        drawScaledPixel(pixelXCol - direction, yRowPos, pixelColor);
+
+        moved = true;
+        break;
       }
     }
+
+    if (!moved && pixelVelocity <= 2)
+    {
+      // Give new pixels a chance to fall.
+      pixelVelocities[pixelKey] += gravity;
+    }
+    else if (!moved)
+    {
+      pixelsToErase.insert(pixelKey);
+      landedPixels.insert(pixelKey);
+    }
+
+    stateIter++;
   }
-  // unsigned long afterCheckEveryCell = millis();
-  // unsigned long checkCellTime = afterCheckEveryCell - beforeCheckEveryCell;
-  // Serial.printf("%lu pixels checked in %lu ms.\r\n", pixelsChecked, checkCellTime);
 
-  // Swap the grid pointers.
+  for (const auto &key : pixelsToErase)
+  {
+    pixelColors.erase(key);
+    pixelVelocities.erase(key);
+    pixelStates.erase(key);
+  }
 
-  lastGrid = grid;
-  lastVelocityGrid = velocityGrid;
-  lastStateGrid = stateGrid;
+  for (const auto &keyVal : pixelColorsToAdd)
+  {
+    pixelColors[keyVal.first] = keyVal.second;
+  }
 
-  grid = nextGrid;
-  velocityGrid = nextVelocityGrid;
-  stateGrid = nextStateGrid;
+  for (const auto &keyVal : pixelStatesToAdd)
+  {
+    pixelStates[keyVal.first] = keyVal.second;
+  }
 
-  nextGrid = lastGrid;
-  nextVelocityGrid = lastVelocityGrid;
-  nextStateGrid = lastStateGrid;
-
-  */
+  for (const auto &keyVal : pixelVelocitiesToAdd)
+  {
+    pixelVelocities[keyVal.first] = keyVal.second;
+  }
 }
