@@ -220,7 +220,7 @@ void loop()
   }
 
   // Get frame rate.
-  fps = 1000 / max(currentMillis - lastMillis, (unsigned long)1);
+  fps = 1000 / max(currentMillis - lastMillis, 1UL);
   sprintf(fpsStringBuffer, "fps:%4lu", fps);
 
   // Display frame rate
