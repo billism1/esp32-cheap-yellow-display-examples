@@ -19,9 +19,12 @@
 
 /////////////////////////////////////////////////////
 // You can adjust the following "subjective" params:
-static const int8_t PIXEL_WIDTH = 3;
+// static const int8_t PIXEL_WIDTH = 3;
+// uint8_t percentInputFill = 20;
+// uint8_t inputWidth = 6;
+static const int8_t PIXEL_WIDTH = 2;
 uint8_t percentInputFill = 20;
-uint8_t inputWidth = 6;
+uint8_t inputWidth = 10;
 uint8_t gravity = 1;
 unsigned long maxFps = 30;
 unsigned long colorChangeTime = 0;
@@ -49,10 +52,10 @@ int16_t inputX = -1;
 int16_t inputY = -1;
 
 // Keys here are a concat of the 16 bit x/y values into a single 32 bit value for more efficient storage. I guess I'm too lazy to make a struct?
-std::unordered_map<uint32_t, uint16_t> pixelColors;    // [X,Y]:[COLOR]
-std::unordered_map<uint32_t, uint8_t> pixelStates;     // [X,Y]:[STATE]
-std::unordered_map<uint32_t, uint8_t> pixelVelocities; // [X,Y]:[VELOCITY]
-std::unordered_set<uint32_t> landedPixels;             // [X,Y]
+std::unordered_map<uint32_t, uint16_t> pixelColors;              // [X,Y]:[COLOR]
+std::unordered_map<uint32_t, uint8_t> pixelStates;               // [X,Y]:[STATE]
+std::unordered_map<uint32_t, uint8_t> pixelVelocities;           // [X,Y]:[VELOCITY]
+std::unordered_map<uint16_t, uint16_t> landedPixelsColumnTops;   // [X]:[Y]  // For each column (X), what is the highest row (Y) where a pixel stopped.
 
 static const uint8_t GRID_STATE_NEW = 1;
 static const uint8_t GRID_STATE_FALLING = 2;
@@ -158,8 +161,33 @@ void drawScaledPixel(int16_t x, int16_t y, uint16_t color)
   }
 }
 
+bool isPixelSlotAvailable(uint32_t xy)
+{
+  // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
+  uint16_t pixelXCol = (uint16_t)((xy & 0xFFFF0000) >> 16);
+  uint16_t pixelYRow = (uint16_t)(xy & 0x0000FFFF);
+
+  return withinScaledRows(pixelYRow)
+    && withinScaledCols(pixelXCol)
+    && pixelStates.find(xy) == pixelStates.end()
+    && pixelYRow < landedPixelsColumnTops[pixelXCol];
+}
+
+void updateLandedPixelsColumnTops(uint32_t xyLanded)
+{
+  // landedPixelsColumnTops stores the highest row (Y) where a pixel stopped for each column (X).
+
+  // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
+  uint16_t pixelXCol = (uint16_t)((xyLanded & 0xFFFF0000) >> 16);
+  uint16_t pixelYRow = (uint16_t)(xyLanded & 0x0000FFFF);
+
+  landedPixelsColumnTops[pixelXCol] = std::min(landedPixelsColumnTops[pixelXCol], pixelYRow);
+}
+
 void setup()
 {
+  //Serial.begin(115200);
+
   // Start the SPI for the touch screen and init the TS library
   Serial.println("Init display...");
   mySpi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
@@ -172,6 +200,10 @@ void setup()
   tft.fillScreen(TFT_BLACK);
 
   colorChangeTime = millis() + 1000;
+
+  // Set the tallest pixel column to be 1 slot bellow the "bottom" (0,0 coordinate being top left.)
+  for (int16_t xCol = 0; xCol < SCALED_COLS; xCol++)
+    landedPixelsColumnTops[xCol] = SCALED_ROWS;
 
   delay(500);
 }
@@ -189,26 +221,26 @@ void loop()
 
   // Get frame rate.
   fps = 1000 / max(currentMillis - lastMillis, (unsigned long)1);
-  sprintf(fpsStringBuffer, "fps: %lu", fps);
+  sprintf(fpsStringBuffer, "fps: %3lu", fps);
 
   // Display frame rate
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  //tft.fillRect(0, 0, 65, 10, BACKGROUND_COLOR);
+  // tft.fillRect(0, 0, 65, 10, BACKGROUND_COLOR);
   tft.drawString(fpsStringBuffer, 0, 0);
 
   memset(fpsStringBuffer, 0x00, sizeof(fpsStringBuffer));
   uint32_t psramSize = ESP.getPsramSize();
   uint32_t freePsram = ESP.getFreePsram();
-  sprintf(fpsStringBuffer, "psram: %u / %u", freePsram, psramSize);
+  sprintf(fpsStringBuffer, "psram: %6u / %6u", freePsram, psramSize);
   tft.drawString(fpsStringBuffer, 0, 10);
 
   uint32_t heapSize = ESP.getHeapSize();
   uint32_t freeHeap = ESP.getFreeHeap();
-  sprintf(fpsStringBuffer, "heap: %u / %u", freeHeap, heapSize);
+  sprintf(fpsStringBuffer, "heap: %6u / %6u", freeHeap, heapSize);
   tft.drawString(fpsStringBuffer, 0, 20);
 
   uint32_t minFreeHeap = ESP.getMinFreeHeap();
-  sprintf(fpsStringBuffer, "min free heap: %u", minFreeHeap);
+  sprintf(fpsStringBuffer, "min free heap: %6u", minFreeHeap);
   tft.drawString(fpsStringBuffer, 0, 30);
 
   lastMillis = currentMillis;
@@ -319,8 +351,7 @@ void loop()
         belowXY_B = ((uint32_t)(pixelXCol - direction) << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
       }
 
-      if (withinScaledRows(yRowPos) &&
-          pixelStates.find(belowXY) == pixelStates.end() && landedPixels.find(belowXY) == landedPixels.end())
+      if (isPixelSlotAvailable(belowXY))
       {
         //  This pixel will go straight down.
         pixelColorsToAdd[belowXY] = pixelColor;
@@ -335,8 +366,7 @@ void loop()
         moved = true;
         break;
       }
-      else if (withinScaledRows(yRowPos) &&
-               pixelStates.find(belowXY_A) == pixelStates.end() && landedPixels.find(belowXY_A) == landedPixels.end())
+      else if (isPixelSlotAvailable(belowXY_A))
       {
         //  This pixel will fall to side A (right)
         pixelColorsToAdd[belowXY_A] = pixelColor;
@@ -351,8 +381,7 @@ void loop()
         moved = true;
         break;
       }
-      else if (withinScaledRows(yRowPos) &&
-               pixelStates.find(belowXY_B) == pixelStates.end() && landedPixels.find(belowXY_B) == landedPixels.end())
+      else if (isPixelSlotAvailable(belowXY_B))
       {
         //  This pixel will fall to side B (left)
         pixelColorsToAdd[belowXY_B] = pixelColor;
@@ -369,7 +398,7 @@ void loop()
       }
     }
 
-    if (!moved && pixelVelocity <= 2)
+    if (!moved && pixelVelocity <= 4)
     {
       // Give new pixels a chance to fall.
       pixelVelocities[pixelKey] += gravity;
@@ -377,7 +406,7 @@ void loop()
     else if (!moved)
     {
       pixelsToErase.insert(pixelKey);
-      landedPixels.insert(pixelKey);
+      updateLandedPixelsColumnTops(pixelKey);
     }
 
     stateIter++;
