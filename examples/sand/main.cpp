@@ -221,27 +221,25 @@ void loop()
 
   // Get frame rate.
   fps = 1000 / max(currentMillis - lastMillis, (unsigned long)1);
-  sprintf(fpsStringBuffer, "fps: %3lu", fps);
+  sprintf(fpsStringBuffer, "fps:%4lu", fps);
 
   // Display frame rate
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  // tft.fillRect(0, 0, 65, 10, BACKGROUND_COLOR);
   tft.drawString(fpsStringBuffer, 0, 0);
 
-  memset(fpsStringBuffer, 0x00, sizeof(fpsStringBuffer));
-  uint32_t psramSize = ESP.getPsramSize();
-  uint32_t freePsram = ESP.getFreePsram();
-  sprintf(fpsStringBuffer, "psram: %6u / %6u", freePsram, psramSize);
-  tft.drawString(fpsStringBuffer, 0, 10);
+  // uint32_t psramSize = ESP.getPsramSize();
+  // uint32_t freePsram = ESP.getFreePsram();
+  // sprintf(fpsStringBuffer, "psram: %6u / %6u", freePsram, psramSize);
+  // tft.drawString(fpsStringBuffer, 0, 10);
 
-  uint32_t heapSize = ESP.getHeapSize();
-  uint32_t freeHeap = ESP.getFreeHeap();
-  sprintf(fpsStringBuffer, "heap: %6u / %6u", freeHeap, heapSize);
-  tft.drawString(fpsStringBuffer, 0, 20);
+  // uint32_t heapSize = ESP.getHeapSize();
+  // uint32_t freeHeap = ESP.getFreeHeap();
+  // sprintf(fpsStringBuffer, "heap: %6u / %6u", freeHeap, heapSize);
+  // tft.drawString(fpsStringBuffer, 0, 20);
 
-  uint32_t minFreeHeap = ESP.getMinFreeHeap();
-  sprintf(fpsStringBuffer, "min free heap: %6u", minFreeHeap);
-  tft.drawString(fpsStringBuffer, 0, 30);
+  // uint32_t minFreeHeap = ESP.getMinFreeHeap();
+  // sprintf(fpsStringBuffer, "min free heap: %6u", minFreeHeap);
+  // tft.drawString(fpsStringBuffer, 0, 30);
 
   lastMillis = currentMillis;
 
@@ -360,8 +358,8 @@ void loop()
 
         pixelsToErase.insert(pixelKey);
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);
-        drawScaledPixel(pixelXCol, yRowPos, pixelColor);
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);     // Out with the old.
+        drawScaledPixel(pixelXCol, yRowPos, pixelColor);             // In with the new.
 
         moved = true;
         break;
@@ -375,8 +373,8 @@ void loop()
 
         pixelsToErase.insert(pixelKey);
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);
-        drawScaledPixel(pixelXCol + direction, yRowPos, pixelColor);
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);      // Out with the old.
+        drawScaledPixel(pixelXCol + direction, yRowPos, pixelColor);  // In with the new.
 
         moved = true;
         break;
@@ -390,8 +388,8 @@ void loop()
 
         pixelsToErase.insert(pixelKey);
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);
-        drawScaledPixel(pixelXCol - direction, yRowPos, pixelColor);
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);      // Out with the old.
+        drawScaledPixel(pixelXCol - direction, yRowPos, pixelColor);  // In with the new.
 
         moved = true;
         break;
