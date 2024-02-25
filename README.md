@@ -1,23 +1,11 @@
-# Examples using the CYD (Cheap Yellow Display)
+# Projects using the CYD (Cheap Yellow Display)
 
-These are example projects I can run on the [ESP32 Arduino LVGL WIFI&Bluetooth Development Board 2.8 " 240*320 Smart Display Screen 2.8inch LCD TFT Module With Touch WROOM](https://www.aliexpress.us/item/3256805849164942.html) board from AliExpress. This is the ESP32-2432S028 board. Based on the ESP32-D0WDQ6.
+These are projects I made to run on the [ESP32 Arduino LVGL WIFI&Bluetooth Development Board 2.8 " 240*320 Smart Display Screen 2.8inch LCD TFT Module With Touch WROOM](https://www.aliexpress.us/item/3256805849164942.html) board as sold on AliExpress. This is the ESP32-2432S028 board. Based on the ESP32-D0WDQ6.
 
-Useful links:
+For more information on this CYD and its variants, more example projects, mods, and more; check out [Brian Lough's ESP32-Cheap-Yellow-Display GitHub repo](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display).
 
----
+### Other useful links:
 
-"Monorepo" with examples and information on using the CYD and CYD variants:
+[LVGL drivers for Chinese Sunton Smart display boards, aka CYD (Cheap Yellow Display)](https://github.com/rzeldent/esp32-smartdisplay)
 
-https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display
-
----
-
-LVGL drivers for Chinese Sunton Smart display boards, aka CYD (Cheap Yellow Display):
-
-https://github.com/rzeldent/esp32-smartdisplay
-
----
-
-Sunton CYD (Cheap Yellow Display) PlatformIo Board definitions:
-
-https://github.com/rzeldent/platformio-espressif32-sunton/
+[Sunton CYD (Cheap Yellow Display) PlatformIo Board definitions](https://github.com/rzeldent/platformio-espressif32-sunton/)
