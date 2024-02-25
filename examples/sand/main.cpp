@@ -23,11 +23,11 @@
 // uint8_t percentInputFill = 20;
 // uint8_t inputWidth = 6;
 static const int8_t PIXEL_WIDTH = 2;
-uint8_t percentInputFill = 10;
-uint8_t inputWidth = 8;
-uint8_t gravity = 1;
-unsigned long maxFps = 30;
-unsigned long colorChangeTime = 0;
+static const uint8_t percentInputFill = 10;
+static const uint8_t inputWidth = 8;
+static const uint8_t gravity = 1;
+static const unsigned long maxFps = 30;
+static const unsigned long colorChangeFrequencyMs = 250;
 // End "subjective" params.
 /////////////////////////////////////////////////////
 
@@ -55,6 +55,8 @@ byte green = 0;
 byte blue = 0;
 byte colorState = 0;
 uint16_t color = red << 11;
+
+unsigned long colorChangeTime = 0;
 
 int16_t inputX = -1;
 int16_t inputY = -1;
@@ -318,7 +320,7 @@ void loop()
   // Change the color of the pixels over time
   if (colorChangeTime < millis())
   {
-    colorChangeTime = millis() + 250;
+    colorChangeTime = millis() + colorChangeFrequencyMs;
     setNextColor();
   }
 
