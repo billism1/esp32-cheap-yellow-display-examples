@@ -23,8 +23,8 @@
 // uint8_t percentInputFill = 20;
 // uint8_t inputWidth = 6;
 static const int8_t PIXEL_WIDTH = 2;
-uint8_t percentInputFill = 20;
-uint8_t inputWidth = 10;
+uint8_t percentInputFill = 10;
+uint8_t inputWidth = 8;
 uint8_t gravity = 1;
 unsigned long maxFps = 30;
 unsigned long colorChangeTime = 0;
@@ -42,6 +42,14 @@ SPIClass mySpi = SPIClass(VSPI);
 XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
 TFT_eSPI tft = TFT_eSPI();
 
+// 16-bit color representation:
+//------------------------------------
+//    Red    ⏐    Green    ⏐   Blue
+// 1 1 1 1 1 ⏐ 1 1 1 1 1 0 ⏐ 0 0 0 0 0
+//      = 31 ⏐        = 62 ⏐       = 0
+//
+// ((31 << 11) | (62 << 5) | 0) = 65472 = 0xffc0
+
 byte red = 31;
 byte green = 0;
 byte blue = 0;
@@ -52,10 +60,10 @@ int16_t inputX = -1;
 int16_t inputY = -1;
 
 // Keys here are a concat of the 16 bit x/y values into a single 32 bit value for more efficient storage. I guess I'm too lazy to make a struct?
-std::unordered_map<uint32_t, uint16_t> pixelColors;              // [X,Y]:[COLOR]
-std::unordered_map<uint32_t, uint8_t> pixelStates;               // [X,Y]:[STATE]
-std::unordered_map<uint32_t, uint8_t> pixelVelocities;           // [X,Y]:[VELOCITY]
-std::unordered_map<uint16_t, uint16_t> landedPixelsColumnTops;   // [X]:[Y]  // For each column (X), what is the highest row (Y) where a pixel stopped.
+std::unordered_map<uint32_t, uint16_t> pixelColors;            // [X,Y]:[COLOR]
+std::unordered_map<uint32_t, uint8_t> pixelStates;             // [X,Y]:[STATE]
+std::unordered_map<uint32_t, uint8_t> pixelVelocities;         // [X,Y]:[VELOCITY]
+std::unordered_map<uint16_t, uint16_t> landedPixelsColumnTops; // [X]:[Y]  // For each column (X), what is the highest row (Y) where a pixel stopped.
 
 static const uint8_t GRID_STATE_NEW = 1;
 static const uint8_t GRID_STATE_FALLING = 2;
@@ -167,10 +175,7 @@ bool isPixelSlotAvailable(uint32_t xy)
   uint16_t pixelXCol = (uint16_t)((xy & 0xFFFF0000) >> 16);
   uint16_t pixelYRow = (uint16_t)(xy & 0x0000FFFF);
 
-  return withinScaledRows(pixelYRow)
-    && withinScaledCols(pixelXCol)
-    && pixelStates.find(xy) == pixelStates.end()
-    && pixelYRow < landedPixelsColumnTops[pixelXCol];
+  return withinScaledRows(pixelYRow) && withinScaledCols(pixelXCol) && pixelStates.find(xy) == pixelStates.end() && pixelYRow < landedPixelsColumnTops[pixelXCol];
 }
 
 void updateLandedPixelsColumnTops(uint32_t xyLanded)
@@ -184,9 +189,28 @@ void updateLandedPixelsColumnTops(uint32_t xyLanded)
   landedPixelsColumnTops[pixelXCol] = std::min(landedPixelsColumnTops[pixelXCol], pixelYRow);
 }
 
+bool canPixelFall(uint32_t xyKey)
+{
+  // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
+  uint16_t pixelYRow = (uint16_t)(xyKey & 0x0000FFFF);
+
+  uint16_t pixelYRowNext = pixelYRow + 1;
+
+  if (!withinScaledRows(pixelYRowNext))
+    return false;
+
+  uint16_t pixelXCol = (uint16_t)((xyKey & 0xFFFF0000) >> 16);
+  uint16_t pixelXColMinus = pixelXCol - 1;
+  uint16_t pixelXColPlus = pixelXCol + 1;
+
+  return (withinScaledCols(pixelXColMinus) && landedPixelsColumnTops[pixelXColMinus] > pixelYRowNext) ||
+         (withinScaledCols(pixelXCol) && landedPixelsColumnTops[pixelXCol] > pixelYRowNext) ||
+         (withinScaledCols(pixelXColPlus) && landedPixelsColumnTops[pixelXColPlus] > pixelYRowNext);
+}
+
 void setup()
 {
-  //Serial.begin(115200);
+  // Serial.begin(115200);
 
   // Start the SPI for the touch screen and init the TS library
   Serial.println("Init display...");
@@ -204,6 +228,11 @@ void setup()
   // Set the tallest pixel column to be 1 slot bellow the "bottom" (0,0 coordinate being top left.)
   for (int16_t xCol = 0; xCol < SCALED_COLS; xCol++)
     landedPixelsColumnTops[xCol] = SCALED_ROWS;
+
+  auto viewportWidth = tft.getViewportWidth();
+  auto viewportHeight = tft.getViewportHeight();
+
+  Serial.printf("Viewport dimensions (W x H): %i x %i\n", viewportWidth, viewportHeight);
 
   delay(500);
 }
@@ -338,70 +367,76 @@ void loop()
       }
 
       uint32_t belowXY_A = -1;
+      uint32_t belowXY_A_XCol = pixelXCol + direction;
       uint32_t belowXY_B = -1;
+      uint32_t belowXY_B_XCol = pixelXCol - direction;
 
-      if (withinScaledCols(pixelXCol + direction))
+      if (withinScaledCols(belowXY_A_XCol))
       {
-        belowXY_A = ((uint32_t)(pixelXCol + direction) << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
+        belowXY_A = (belowXY_A_XCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
       }
-      if (withinScaledCols(pixelXCol - direction))
+      if (withinScaledCols(belowXY_B_XCol))
       {
-        belowXY_B = ((uint32_t)(pixelXCol - direction) << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
+        belowXY_B = (belowXY_B_XCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
       }
 
-      if (isPixelSlotAvailable(belowXY))
+      if (isPixelSlotAvailable(belowXY) && pixelStatesToAdd.find(belowXY) == pixelStatesToAdd.end())
       {
         //  This pixel will go straight down.
         pixelColorsToAdd[belowXY] = pixelColor;
         pixelVelocitiesToAdd[belowXY] = pixelVelocity + gravity;
         pixelStatesToAdd[belowXY] = GRID_STATE_FALLING;
 
-        pixelsToErase.insert(pixelKey);
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
+        drawScaledPixel(pixelXCol, yRowPos, pixelColor);         // In with the new.
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);     // Out with the old.
-        drawScaledPixel(pixelXCol, yRowPos, pixelColor);             // In with the new.
+        pixelsToErase.insert(pixelKey);
+        pixelsToErase.erase(belowXY);
 
         moved = true;
         break;
       }
-      else if (isPixelSlotAvailable(belowXY_A))
+      else if (isPixelSlotAvailable(belowXY_A) && pixelStatesToAdd.find(belowXY_A) == pixelStatesToAdd.end())
       {
         //  This pixel will fall to side A (right)
         pixelColorsToAdd[belowXY_A] = pixelColor;
         pixelVelocitiesToAdd[belowXY_A] = pixelVelocity + gravity;
         pixelStatesToAdd[belowXY_A] = GRID_STATE_FALLING;
 
-        pixelsToErase.insert(pixelKey);
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);  // Out with the old.
+        drawScaledPixel(belowXY_A_XCol, yRowPos, pixelColor);     // In with the new.
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);      // Out with the old.
-        drawScaledPixel(pixelXCol + direction, yRowPos, pixelColor);  // In with the new.
+        pixelsToErase.insert(pixelKey);
+        pixelsToErase.erase(belowXY_A);
 
         moved = true;
         break;
       }
-      else if (isPixelSlotAvailable(belowXY_B))
+      else if (isPixelSlotAvailable(belowXY_B) && pixelStatesToAdd.find(belowXY_B) == pixelStatesToAdd.end())
       {
         //  This pixel will fall to side B (left)
         pixelColorsToAdd[belowXY_B] = pixelColor;
         pixelVelocitiesToAdd[belowXY_B] = pixelVelocity + gravity;
         pixelStatesToAdd[belowXY_B] = GRID_STATE_FALLING;
 
-        pixelsToErase.insert(pixelKey);
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);  // Out with the old.
+        drawScaledPixel(belowXY_B_XCol, yRowPos, pixelColor);     // In with the new.
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);      // Out with the old.
-        drawScaledPixel(pixelXCol - direction, yRowPos, pixelColor);  // In with the new.
+        pixelsToErase.insert(pixelKey);
+        pixelsToErase.erase(belowXY_B);
 
         moved = true;
         break;
       }
     }
 
-    if (!moved && pixelVelocity <= 4)
+    if (!moved)
     {
       // Give new pixels a chance to fall.
       pixelVelocities[pixelKey] += gravity;
     }
-    else if (!moved)
+
+    if (!moved && !canPixelFall(pixelKey))
     {
       pixelsToErase.insert(pixelKey);
       updateLandedPixelsColumnTops(pixelKey);
@@ -412,19 +447,22 @@ void loop()
 
   for (const auto &key : pixelsToErase)
   {
+    if (pixelStatesToAdd.find(key) != pixelStatesToAdd.end())
+      continue; // Do not erase pixel if it is being back-filled.
+
     pixelColors.erase(key);
     pixelVelocities.erase(key);
     pixelStates.erase(key);
   }
 
-  for (const auto &keyVal : pixelColorsToAdd)
-  {
-    pixelColors[keyVal.first] = keyVal.second;
-  }
-
   for (const auto &keyVal : pixelStatesToAdd)
   {
     pixelStates[keyVal.first] = keyVal.second;
+  }
+
+  for (const auto &keyVal : pixelColorsToAdd)
+  {
+    pixelColors[keyVal.first] = keyVal.second;
   }
 
   for (const auto &keyVal : pixelVelocitiesToAdd)
