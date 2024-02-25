@@ -23,4 +23,4 @@ For more information on this CYD and its variants, more example projects, mods, 
 
 \* The "Fluid Simulation" project was copied from [github.com/colonelwatch/ESP32-fluid-simulation/](https://github.com/colonelwatch/ESP32-fluid-simulation/). I modified it to work on my CYD device and converted it to a Platform.io project.
 
-\*\* The "Particles" project was copied from [github.com/doctorpartlow/esp32s3lilygoanimations](https://github.com/doctorpartlow/esp32s3lilygoanimations/blob/main/particles.ino). I fixed a couple monor bugs and converted it to a Platform.io project.
+\*\* The "Particles" project was copied from [github.com/doctorpartlow/esp32s3lilygoanimations](https://github.com/doctorpartlow/esp32s3lilygoanimations/blob/main/particles.ino). I fixed a couple monor bugs, modified it to work on the CTD, and converted it to a Platform.io project.
