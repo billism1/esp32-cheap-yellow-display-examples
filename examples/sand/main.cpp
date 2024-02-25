@@ -204,8 +204,8 @@ bool canPixelFall(uint32_t xyKey)
   uint16_t pixelXColPlus = pixelXCol + 1;
 
   return (withinScaledCols(pixelXColMinus) && landedPixelsColumnTops[pixelXColMinus] > pixelYRowNext) ||
-         (withinScaledCols(pixelXColMinus) && landedPixelsColumnTops[pixelXCol] > pixelYRowNext) ||
-         (withinScaledCols(pixelXColMinus) && landedPixelsColumnTops[pixelXColPlus] > pixelYRowNext);
+         (withinScaledCols(pixelXCol) && landedPixelsColumnTops[pixelXCol] > pixelYRowNext) ||
+         (withinScaledCols(pixelXColPlus) && landedPixelsColumnTops[pixelXColPlus] > pixelYRowNext);
 }
 
 void setup()
