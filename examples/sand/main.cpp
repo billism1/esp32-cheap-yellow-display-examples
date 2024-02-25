@@ -367,15 +367,17 @@ void loop()
       }
 
       uint32_t belowXY_A = -1;
+      uint32_t belowXY_A_XCol = pixelXCol + direction;
       uint32_t belowXY_B = -1;
+      uint32_t belowXY_B_XCol = pixelXCol - direction;
 
-      if (withinScaledCols(pixelXCol + direction))
+      if (withinScaledCols(belowXY_A_XCol))
       {
-        belowXY_A = ((uint32_t)(pixelXCol + direction) << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
+        belowXY_A = (belowXY_A_XCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
       }
-      if (withinScaledCols(pixelXCol - direction))
+      if (withinScaledCols(belowXY_B_XCol))
       {
-        belowXY_B = ((uint32_t)(pixelXCol - direction) << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
+        belowXY_B = (belowXY_B_XCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
       }
 
       if (isPixelSlotAvailable(belowXY) && pixelStatesToAdd.find(belowXY) == pixelStatesToAdd.end())
@@ -384,6 +386,9 @@ void loop()
         pixelColorsToAdd[belowXY] = pixelColor;
         pixelVelocitiesToAdd[belowXY] = pixelVelocity + gravity;
         pixelStatesToAdd[belowXY] = GRID_STATE_FALLING;
+
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
+        drawScaledPixel(pixelXCol, yRowPos, pixelColor);         // In with the new.
 
         pixelsToErase.insert(pixelKey);
         pixelsToErase.erase(belowXY);
@@ -398,6 +403,9 @@ void loop()
         pixelVelocitiesToAdd[belowXY_A] = pixelVelocity + gravity;
         pixelStatesToAdd[belowXY_A] = GRID_STATE_FALLING;
 
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);  // Out with the old.
+        drawScaledPixel(belowXY_A_XCol, yRowPos, pixelColor);     // In with the new.
+
         pixelsToErase.insert(pixelKey);
         pixelsToErase.erase(belowXY_A);
 
@@ -410,6 +418,9 @@ void loop()
         pixelColorsToAdd[belowXY_B] = pixelColor;
         pixelVelocitiesToAdd[belowXY_B] = pixelVelocity + gravity;
         pixelStatesToAdd[belowXY_B] = GRID_STATE_FALLING;
+
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);  // Out with the old.
+        drawScaledPixel(belowXY_B_XCol, yRowPos, pixelColor);     // In with the new.
 
         pixelsToErase.insert(pixelKey);
         pixelsToErase.erase(belowXY_B);
@@ -439,11 +450,6 @@ void loop()
     if (pixelStatesToAdd.find(key) != pixelStatesToAdd.end())
       continue; // Do not erase pixel if it is being back-filled.
 
-    uint16_t x = (uint16_t)((key & 0xFFFF0000) >> 16);
-    uint16_t y = (uint16_t)(key & 0x0000FFFF);
-    if (landedPixelsColumnTops[x] > y)
-      drawScaledPixel(x, y, BACKGROUND_COLOR); // Out with the old.
-
     pixelColors.erase(key);
     pixelVelocities.erase(key);
     pixelStates.erase(key);
@@ -456,9 +462,6 @@ void loop()
 
   for (const auto &keyVal : pixelColorsToAdd)
   {
-    uint16_t x = (uint16_t)((keyVal.first & 0xFFFF0000) >> 16);
-    uint16_t y = (uint16_t)(keyVal.first & 0x0000FFFF);
-    drawScaledPixel(x, y, keyVal.second); // In with the new.
     pixelColors[keyVal.first] = keyVal.second;
   }
 
