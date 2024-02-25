@@ -155,7 +155,7 @@ void setNextColor()
     color++;
 }
 
-// Scale pixel and then draw it.
+// Convert scaled pixel to native pixel area and then draw it.
 void drawScaledPixel(int16_t x, int16_t y, uint16_t color)
 {
   // Scale
