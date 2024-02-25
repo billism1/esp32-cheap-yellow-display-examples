@@ -256,19 +256,19 @@ void loop()
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.drawString(fpsStringBuffer, 0, 0);
 
-  uint32_t psramSize = ESP.getPsramSize();
-  uint32_t freePsram = ESP.getFreePsram();
-  sprintf(fpsStringBuffer, "psram: %6u / %6u", freePsram, psramSize);
-  tft.drawString(fpsStringBuffer, 0, 10);
+  // uint32_t psramSize = ESP.getPsramSize();
+  // uint32_t freePsram = ESP.getFreePsram();
+  // sprintf(fpsStringBuffer, "psram: %6u / %6u", freePsram, psramSize);
+  // tft.drawString(fpsStringBuffer, 0, 10);
 
-  uint32_t heapSize = ESP.getHeapSize();
-  uint32_t freeHeap = ESP.getFreeHeap();
-  sprintf(fpsStringBuffer, "heap: %6u / %6u", freeHeap, heapSize);
-  tft.drawString(fpsStringBuffer, 0, 20);
+  // uint32_t heapSize = ESP.getHeapSize();
+  // uint32_t freeHeap = ESP.getFreeHeap();
+  // sprintf(fpsStringBuffer, "heap: %6u / %6u", freeHeap, heapSize);
+  // tft.drawString(fpsStringBuffer, 0, 20);
 
-  uint32_t minFreeHeap = ESP.getMinFreeHeap();
-  sprintf(fpsStringBuffer, "min free heap: %6u", minFreeHeap);
-  tft.drawString(fpsStringBuffer, 0, 30);
+  // uint32_t minFreeHeap = ESP.getMinFreeHeap();
+  // sprintf(fpsStringBuffer, "min free heap: %6u", minFreeHeap);
+  // tft.drawString(fpsStringBuffer, 0, 30);
 
   lastMillis = currentMillis;
 
