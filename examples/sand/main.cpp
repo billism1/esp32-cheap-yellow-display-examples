@@ -436,7 +436,7 @@ void loop()
       pixelVelocities[pixelKey] += gravity;
     }
 
-    if (!moved && !canPixelFall(pixelKey) && pixelVelocity >= 7)
+    if (!moved && !canPixelFall(pixelKey))
     {
       pixelsToErase.insert(pixelKey);
       updateLandedPixelsColumnTops(pixelKey);
