@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <XPT2046_Touchscreen.h>
 #include <TFT_eSPI.h>
+#include "PixelState.h"
 
 #define XPT2046_IRQ 36
 #define XPT2046_MOSI 32
@@ -61,14 +62,9 @@ unsigned long colorChangeTime = 0;
 int16_t inputX = -1;
 int16_t inputY = -1;
 
-// Keys here are a concat of the 16 bit x/y values into a single 32 bit value for more efficient storage. I guess I'm too lazy to make a struct?
-std::unordered_map<uint32_t, uint16_t> pixelColors;            // [X,Y]:[COLOR]
-std::unordered_map<uint32_t, uint8_t> pixelStates;             // [X,Y]:[STATE]
-std::unordered_map<uint32_t, uint8_t> pixelVelocities;         // [X,Y]:[VELOCITY]
+// pixelStates key is a concat of the 16 bit x/y values into a single 32 bit value for more efficient storage.
+std::unordered_map<uint32_t, PointState> pixelStates;               // [X,Y]:[STATE_DATA]
 std::unordered_map<uint16_t, uint16_t> landedPixelsColumnTops; // [X]:[Y]  // For each column (X), what is the highest row (Y) where a pixel stopped.
-
-static const uint8_t GRID_STATE_NEW = 1;
-static const uint8_t GRID_STATE_FALLING = 2;
 
 long lastMillis = 0;
 int fps = 0;
@@ -155,6 +151,20 @@ void setNextColor()
     color++;
 }
 
+Point getXYIndividualValues(uint32_t xy)
+{
+  // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
+  uint16_t pixelXCol = (uint16_t)((xy & 0xFFFF0000) >> 16);
+  uint16_t pixelYRow = (uint16_t)(xy & 0x0000FFFF);
+
+  return Point(pixelXCol, pixelYRow);
+}
+
+uint32_t getXYCombinedValue(uint16_t x, uint16_t y)
+{
+  return ((uint32_t)x << 16) | (uint32_t)(y);
+}
+
 // Convert scaled pixel to native pixel area and then draw it.
 void drawScaledPixel(int16_t x, int16_t y, uint16_t color)
 {
@@ -173,22 +183,17 @@ void drawScaledPixel(int16_t x, int16_t y, uint16_t color)
 
 bool isPixelSlotAvailable(uint32_t xy)
 {
-  // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
-  uint16_t pixelXCol = (uint16_t)((xy & 0xFFFF0000) >> 16);
-  uint16_t pixelYRow = (uint16_t)(xy & 0x0000FFFF);
-
-  return withinScaledRows(pixelYRow) && withinScaledCols(pixelXCol) && pixelStates.find(xy) == pixelStates.end() && pixelYRow < landedPixelsColumnTops[pixelXCol];
+  auto point = getXYIndividualValues(xy);
+  return withinScaledRows(point.YRow) && withinScaledCols(point.XCol) && pixelStates.find(xy) == pixelStates.end() && point.YRow < landedPixelsColumnTops[point.XCol];
 }
 
 void updateLandedPixelsColumnTops(uint32_t xyLanded)
 {
   // landedPixelsColumnTops stores the highest row (Y) where a pixel stopped for each column (X).
 
-  // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
-  uint16_t pixelXCol = (uint16_t)((xyLanded & 0xFFFF0000) >> 16);
-  uint16_t pixelYRow = (uint16_t)(xyLanded & 0x0000FFFF);
+  auto point = getXYIndividualValues(xyLanded);
 
-  landedPixelsColumnTops[pixelXCol] = std::min(landedPixelsColumnTops[pixelXCol], pixelYRow);
+  landedPixelsColumnTops[point.XCol] = std::min(landedPixelsColumnTops[point.XCol], point.YRow);
 }
 
 bool canPixelFall(uint32_t xyKey)
@@ -306,9 +311,9 @@ void loop()
 
           if (withinNativeCols(xCol) && withinNativeRows(yRow) && pixelStates.find(xy) == pixelStates.end())
           {
-            pixelColors[xy] = color;
-            pixelStates[xy] = GRID_STATE_NEW;
-            pixelVelocities[xy] = (uint8_t)1;
+            pixelStates[xy].Color = color;
+            pixelStates[xy].State = GRID_STATE_NEW;
+            pixelStates[xy].Velocity = (uint8_t)1;
 
             drawScaledPixel(xCol, yRow, color);
           }
@@ -324,31 +329,28 @@ void loop()
     setNextColor();
   }
 
-  std::unordered_set<uint32_t> pixelsToErase;                 // [X,Y]
-  std::unordered_map<uint32_t, uint16_t> pixelColorsToAdd;    // [X,Y]:[COLOR]
-  std::unordered_map<uint32_t, uint8_t> pixelStatesToAdd;     // [X,Y]:[STATE]
-  std::unordered_map<uint32_t, uint8_t> pixelVelocitiesToAdd; // [X,Y]:[VELOCITY]
+  std::unordered_set<uint32_t> pixelsToErase;           // [X,Y]
+  std::unordered_map<uint32_t, PointState> pixelStatesToAdd; // [X,Y]:[STATE_DATA]
 
   // Iterate moving pixels and move them as needed.
-  std::unordered_map<uint32_t, uint8_t>::iterator stateIter = pixelStates.begin();
-  while (stateIter != pixelStates.end())
+  for (const auto &keyVal : pixelStates)
   {
-    auto keyVal = *stateIter;
     auto pixelKey = keyVal.first;
 
     // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
-    uint16_t pixelXCol = (uint16_t)((pixelKey & 0xFFFF0000) >> 16);
-    uint16_t pixelYRow = (uint16_t)(pixelKey & 0x0000FFFF);
+    auto pixelPoint = getXYIndividualValues(pixelKey);
+    uint16_t pixelXCol = pixelPoint.XCol;
+    uint16_t pixelYRow = pixelPoint.YRow;
 
-    auto pixelState = keyVal.second;
+    auto pixelState = keyVal.second.State;
     if (pixelState == GRID_STATE_NEW)
     {
-      pixelStates[pixelKey] = GRID_STATE_FALLING;
+      pixelStates[pixelKey].State = GRID_STATE_FALLING;
       continue;
     }
 
-    auto pixelColor = pixelColors[pixelKey];
-    auto pixelVelocity = pixelVelocities[pixelKey];
+    auto pixelColor = pixelStates[pixelKey].Color;
+    auto pixelVelocity = pixelStates[pixelKey].Velocity;
 
     bool moved = false;
 
@@ -360,7 +362,7 @@ void loop()
         continue;
       }
 
-      uint32_t belowXY = ((uint32_t)pixelXCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
+      uint32_t belowXY = getXYCombinedValue(pixelXCol, yRowPos);
 
       int16_t direction = 1;
       if (random(100) < 50)
@@ -369,25 +371,23 @@ void loop()
       }
 
       uint32_t belowXY_A = -1;
-      uint32_t belowXY_A_XCol = pixelXCol + direction;
+      uint16_t belowXY_A_XCol = pixelXCol + direction;
       uint32_t belowXY_B = -1;
-      uint32_t belowXY_B_XCol = pixelXCol - direction;
+      uint16_t belowXY_B_XCol = pixelXCol - direction;
 
       if (withinScaledCols(belowXY_A_XCol))
       {
-        belowXY_A = (belowXY_A_XCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
+        belowXY_A = getXYCombinedValue(belowXY_A_XCol, yRowPos);
       }
       if (withinScaledCols(belowXY_B_XCol))
       {
-        belowXY_B = (belowXY_B_XCol << 16) | (uint32_t)yRowPos; // Concat 16 bit x/y values into one 32 bit value
+        belowXY_B = getXYCombinedValue(belowXY_B_XCol, yRowPos);
       }
 
       if (isPixelSlotAvailable(belowXY) && pixelStatesToAdd.find(belowXY) == pixelStatesToAdd.end())
       {
         //  This pixel will go straight down.
-        pixelColorsToAdd[belowXY] = pixelColor;
-        pixelVelocitiesToAdd[belowXY] = pixelVelocity + gravity;
-        pixelStatesToAdd[belowXY] = GRID_STATE_FALLING;
+        pixelStatesToAdd[belowXY] = PointState(pixelXCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
 
         drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
         drawScaledPixel(pixelXCol, yRowPos, pixelColor);         // In with the new.
@@ -401,12 +401,10 @@ void loop()
       else if (isPixelSlotAvailable(belowXY_A) && pixelStatesToAdd.find(belowXY_A) == pixelStatesToAdd.end())
       {
         //  This pixel will fall to side A (right)
-        pixelColorsToAdd[belowXY_A] = pixelColor;
-        pixelVelocitiesToAdd[belowXY_A] = pixelVelocity + gravity;
-        pixelStatesToAdd[belowXY_A] = GRID_STATE_FALLING;
+        pixelStatesToAdd[belowXY_A] = PointState(belowXY_A_XCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);  // Out with the old.
-        drawScaledPixel(belowXY_A_XCol, yRowPos, pixelColor);     // In with the new.
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
+        drawScaledPixel(belowXY_A_XCol, yRowPos, pixelColor);    // In with the new.
 
         pixelsToErase.insert(pixelKey);
         pixelsToErase.erase(belowXY_A);
@@ -417,12 +415,10 @@ void loop()
       else if (isPixelSlotAvailable(belowXY_B) && pixelStatesToAdd.find(belowXY_B) == pixelStatesToAdd.end())
       {
         //  This pixel will fall to side B (left)
-        pixelColorsToAdd[belowXY_B] = pixelColor;
-        pixelVelocitiesToAdd[belowXY_B] = pixelVelocity + gravity;
-        pixelStatesToAdd[belowXY_B] = GRID_STATE_FALLING;
+        pixelStatesToAdd[belowXY_B] = PointState(belowXY_B_XCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
 
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR);  // Out with the old.
-        drawScaledPixel(belowXY_B_XCol, yRowPos, pixelColor);     // In with the new.
+        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
+        drawScaledPixel(belowXY_B_XCol, yRowPos, pixelColor);    // In with the new.
 
         pixelsToErase.insert(pixelKey);
         pixelsToErase.erase(belowXY_B);
@@ -435,7 +431,7 @@ void loop()
     if (!moved)
     {
       // Give new pixels a chance to fall.
-      pixelVelocities[pixelKey] += gravity;
+      pixelStates[pixelKey].Velocity += gravity;
     }
 
     if (!moved && !canPixelFall(pixelKey))
@@ -443,8 +439,6 @@ void loop()
       pixelsToErase.insert(pixelKey);
       updateLandedPixelsColumnTops(pixelKey);
     }
-
-    stateIter++;
   }
 
   for (const auto &key : pixelsToErase)
@@ -452,23 +446,11 @@ void loop()
     if (pixelStatesToAdd.find(key) != pixelStatesToAdd.end())
       continue; // Do not erase pixel if it is being back-filled.
 
-    pixelColors.erase(key);
-    pixelVelocities.erase(key);
     pixelStates.erase(key);
   }
 
   for (const auto &keyVal : pixelStatesToAdd)
   {
-    pixelStates[keyVal.first] = keyVal.second;
-  }
-
-  for (const auto &keyVal : pixelColorsToAdd)
-  {
-    pixelColors[keyVal.first] = keyVal.second;
-  }
-
-  for (const auto &keyVal : pixelVelocitiesToAdd)
-  {
-    pixelVelocities[keyVal.first] = keyVal.second;
+    pixelStates[keyVal.first] = PointState(keyVal.second.XCol, keyVal.second.YRow, keyVal.second.State, keyVal.second.Color, keyVal.second.Velocity);
   }
 }
