@@ -15,6 +15,7 @@ For more information on this CYD and its variants, more example projects, mods, 
 # The projects
 
 - [Sand](projects/sand) A falling sand with new sand/pixels changing color over time, falling from the touchscreen inpout point.
+- [Sand (Multi-Task)](projects/sand-multi-task) I copied the sand project above and then modified it with parallelization to take advantage of the dual-core ESP32 with a performance boost.
 - [Paint](projects/paint) A simple spray paint program with the new paint changing color over time.
 - [Fluid Simulation *](projects/fluid-simulation) A simple (though not state-of-the-art) C++ implementation of Jos Stam's fluid simulation method
 - [Particles **](projects/particles) Particles orbiting around a point of center mass.
