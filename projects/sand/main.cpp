@@ -63,8 +63,15 @@ int16_t inputX = -1;
 int16_t inputY = -1;
 
 // pixelStates key is a concat of the 16 bit x/y values into a single 32 bit value for more efficient storage.
-std::unordered_map<uint32_t, PointState> pixelStates;               // [X,Y]:[STATE_DATA]
+std::unordered_map<uint32_t, PointState> pixelStates;          // [X,Y]:[STATE_DATA]
 std::unordered_map<uint16_t, uint16_t> landedPixelsColumnTops; // [X]:[Y]  // For each column (X), what is the highest row (Y) where a pixel stopped.
+
+static std::unordered_map<uint32_t, PointState> pixelStatesToAdd;
+static std::unordered_set<uint32_t> pixelsToErase;
+
+SemaphoreHandle_t xStateMutex = NULL;
+SemaphoreHandle_t xSemaphore1 = NULL;
+SemaphoreHandle_t xSemaphore2 = NULL;
 
 long lastMillis = 0;
 int fps = 0;
@@ -215,12 +222,162 @@ bool canPixelFall(uint32_t xyKey)
          (withinScaledCols(pixelXColPlus) && landedPixelsColumnTops[pixelXColPlus] > pixelYRowNext);
 }
 
+void movePixels(std::unordered_map<uint32_t, PointState>::iterator _pixelStatesIteratorBegin, std::unordered_map<uint32_t, PointState>::iterator _pixelStatesIteratorEnd)
+{
+  // Iterate moving pixels and move them as needed.
+  for (auto iter = _pixelStatesIteratorBegin; iter != _pixelStatesIteratorEnd; iter++)
+  {
+    auto keyVal = *iter;
+    auto pixelKey = keyVal.first;
+    auto thisPixelState = keyVal.second;
+
+    // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
+    auto pixelPoint = getXYIndividualValues(pixelKey);
+    uint16_t pixelXCol = pixelPoint.XCol;
+    uint16_t pixelYRow = pixelPoint.YRow;
+
+    auto pixelState = keyVal.second.State;
+    if (pixelState == GRID_STATE_NEW)
+    {
+      pixelStates[pixelKey].State = GRID_STATE_FALLING;
+      continue;
+    }
+
+    auto pixelColor = thisPixelState.Color;
+    auto pixelVelocity = thisPixelState.Velocity;
+
+    bool moved = false;
+
+    uint16_t newMaxYRowPos = uint16_t(pixelYRow + pixelVelocity);
+    for (int16_t yRowPos = newMaxYRowPos; yRowPos > pixelYRow; yRowPos--)
+    {
+      if (!withinScaledRows(yRowPos))
+      {
+        continue;
+      }
+
+      uint32_t belowXY = getXYCombinedValue(pixelXCol, yRowPos);
+
+      int16_t direction = 1;
+      if (random(100) < 50)
+      {
+        direction *= -1;
+      }
+
+      uint32_t belowXY_A = -1;
+      uint16_t belowXY_A_XCol = pixelXCol + direction;
+      uint32_t belowXY_B = -1;
+      uint16_t belowXY_B_XCol = pixelXCol - direction;
+
+      if (withinScaledCols(belowXY_A_XCol))
+      {
+        belowXY_A = getXYCombinedValue(belowXY_A_XCol, yRowPos);
+      }
+      if (withinScaledCols(belowXY_B_XCol))
+      {
+        belowXY_B = getXYCombinedValue(belowXY_B_XCol, yRowPos);
+      }
+
+      if (isPixelSlotAvailable(belowXY) && pixelStatesToAdd.find(belowXY) == pixelStatesToAdd.end())
+      {
+        //    This pixel will go straight down.
+        pixelStatesToAdd[belowXY] = PointState(pixelXCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
+
+        if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+        {
+          drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
+          drawScaledPixel(pixelXCol, yRowPos, pixelColor);         // In with the new.
+
+          pixelsToErase.insert(pixelKey);
+          pixelsToErase.erase(belowXY);
+
+          xSemaphoreGive(xStateMutex);
+        }
+
+        moved = true;
+        break;
+      }
+      else if (isPixelSlotAvailable(belowXY_A) && pixelStatesToAdd.find(belowXY_A) == pixelStatesToAdd.end())
+      {
+        //  This pixel will fall to side A (right)
+        pixelStatesToAdd[belowXY_A] = PointState(belowXY_A_XCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
+
+        if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+        {
+          drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
+          drawScaledPixel(belowXY_A_XCol, yRowPos, pixelColor);    // In with the new.
+
+          pixelsToErase.insert(pixelKey);
+          pixelsToErase.erase(belowXY_A);
+          xSemaphoreGive(xStateMutex);
+        }
+
+        moved = true;
+        break;
+      }
+      else if (isPixelSlotAvailable(belowXY_B) && pixelStatesToAdd.find(belowXY_B) == pixelStatesToAdd.end())
+      {
+        //  This pixel will fall to side B (left)
+        pixelStatesToAdd[belowXY_B] = PointState(belowXY_B_XCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
+
+        if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+        {
+          drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
+          drawScaledPixel(belowXY_B_XCol, yRowPos, pixelColor);    // In with the new.
+
+          pixelsToErase.insert(pixelKey);
+          pixelsToErase.erase(belowXY_B);
+
+          xSemaphoreGive(xStateMutex);
+        }
+
+        moved = true;
+        break;
+      }
+    }
+
+    if (!moved)
+    {
+      thisPixelState.Velocity += gravity;
+    }
+
+    if (!moved && !canPixelFall(pixelKey))
+    {
+      if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+      {
+        pixelsToErase.insert(pixelKey);
+        updateLandedPixelsColumnTops(pixelKey);
+        xSemaphoreGive(xStateMutex);
+      }
+    }
+  }
+}
+
+void task1(void *pvParameters)
+{
+  auto coreId = xPortGetCoreID();
+
+  while (1)
+  {
+    if (xSemaphoreTake(xSemaphore1, portMAX_DELAY))
+    {
+      auto pixelStatesBegin = pixelStates.begin();
+      auto pixelStatesMid = std::next(pixelStatesBegin, (pixelStates.size() / 2));
+      auto pixelStatesEnd = pixelStates.end();
+
+      movePixels(pixelStatesMid, pixelStatesEnd);
+
+      xSemaphoreGive(xSemaphore2); // release the mutex
+    }
+  }
+}
+
 void setup()
 {
   // Serial.begin(115200);
 
   // Start the SPI for the touch screen and init the TS library
-  Serial.println("Init display...");
+  // Serial.println("Init display...");
   mySpi.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   ts.begin(mySpi);
   ts.setRotation(1);
@@ -239,7 +396,21 @@ void setup()
   auto viewportWidth = tft.getViewportWidth();
   auto viewportHeight = tft.getViewportHeight();
 
-  Serial.printf("Viewport dimensions (W x H): %i x %i\n", viewportWidth, viewportHeight);
+  // Serial.printf("Viewport dimensions (W x H): %i x %i\n", viewportWidth, viewportHeight);
+
+  xStateMutex = xSemaphoreCreateMutex();
+  xSemaphore1 = xSemaphoreCreateCounting(1, 0);
+  xSemaphore2 = xSemaphoreCreateCounting(1, 0);
+
+  xTaskCreatePinnedToCore(
+      task1,   // Function to implement the task
+      "task1", // Name of the task
+      4096,    // Stack size in words
+      NULL,    // Task input parameter
+      1,       // Priority of the task
+      NULL,    // Task handle.
+      0        // Core where the task should run
+  );
 
   delay(500);
 }
@@ -329,117 +500,21 @@ void loop()
     setNextColor();
   }
 
-  std::unordered_set<uint32_t> pixelsToErase;           // [X,Y]
-  std::unordered_map<uint32_t, PointState> pixelStatesToAdd; // [X,Y]:[STATE_DATA]
+  // Split up the work.
 
-  // Iterate moving pixels and move them as needed.
-  for (const auto &keyVal : pixelStates)
-  {
-    auto pixelKey = keyVal.first;
+  auto pixelStatesBegin = pixelStates.begin();
+  auto pixelStatesMid = std::next(pixelStatesBegin, (pixelStates.size() / 2));
 
-    // The 16 bit x/y values are stored as one 32 bit concatenation. Get the individual x/y values.
-    auto pixelPoint = getXYIndividualValues(pixelKey);
-    uint16_t pixelXCol = pixelPoint.XCol;
-    uint16_t pixelYRow = pixelPoint.YRow;
+  pixelStatesToAdd.clear();
+  pixelsToErase.clear();
 
-    auto pixelState = keyVal.second.State;
-    if (pixelState == GRID_STATE_NEW)
-    {
-      pixelStates[pixelKey].State = GRID_STATE_FALLING;
-      continue;
-    }
+  // Start task and proceed.
+  xSemaphoreGive(xSemaphore1);
 
-    auto pixelColor = pixelStates[pixelKey].Color;
-    auto pixelVelocity = pixelStates[pixelKey].Velocity;
+  movePixels(pixelStatesBegin, pixelStatesMid);
 
-    bool moved = false;
-
-    uint16_t newMaxYRowPos = uint16_t(pixelYRow + pixelVelocity);
-    for (int16_t yRowPos = newMaxYRowPos; yRowPos > pixelYRow; yRowPos--)
-    {
-      if (!withinScaledRows(yRowPos))
-      {
-        continue;
-      }
-
-      uint32_t belowXY = getXYCombinedValue(pixelXCol, yRowPos);
-
-      int16_t direction = 1;
-      if (random(100) < 50)
-      {
-        direction *= -1;
-      }
-
-      uint32_t belowXY_A = -1;
-      uint16_t belowXY_A_XCol = pixelXCol + direction;
-      uint32_t belowXY_B = -1;
-      uint16_t belowXY_B_XCol = pixelXCol - direction;
-
-      if (withinScaledCols(belowXY_A_XCol))
-      {
-        belowXY_A = getXYCombinedValue(belowXY_A_XCol, yRowPos);
-      }
-      if (withinScaledCols(belowXY_B_XCol))
-      {
-        belowXY_B = getXYCombinedValue(belowXY_B_XCol, yRowPos);
-      }
-
-      if (isPixelSlotAvailable(belowXY) && pixelStatesToAdd.find(belowXY) == pixelStatesToAdd.end())
-      {
-        //  This pixel will go straight down.
-        pixelStatesToAdd[belowXY] = PointState(pixelXCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
-
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
-        drawScaledPixel(pixelXCol, yRowPos, pixelColor);         // In with the new.
-
-        pixelsToErase.insert(pixelKey);
-        pixelsToErase.erase(belowXY);
-
-        moved = true;
-        break;
-      }
-      else if (isPixelSlotAvailable(belowXY_A) && pixelStatesToAdd.find(belowXY_A) == pixelStatesToAdd.end())
-      {
-        //  This pixel will fall to side A (right)
-        pixelStatesToAdd[belowXY_A] = PointState(belowXY_A_XCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
-
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
-        drawScaledPixel(belowXY_A_XCol, yRowPos, pixelColor);    // In with the new.
-
-        pixelsToErase.insert(pixelKey);
-        pixelsToErase.erase(belowXY_A);
-
-        moved = true;
-        break;
-      }
-      else if (isPixelSlotAvailable(belowXY_B) && pixelStatesToAdd.find(belowXY_B) == pixelStatesToAdd.end())
-      {
-        //  This pixel will fall to side B (left)
-        pixelStatesToAdd[belowXY_B] = PointState(belowXY_B_XCol, yRowPos, GRID_STATE_FALLING, pixelColor, pixelVelocity + gravity);
-
-        drawScaledPixel(pixelXCol, pixelYRow, BACKGROUND_COLOR); // Out with the old.
-        drawScaledPixel(belowXY_B_XCol, yRowPos, pixelColor);    // In with the new.
-
-        pixelsToErase.insert(pixelKey);
-        pixelsToErase.erase(belowXY_B);
-
-        moved = true;
-        break;
-      }
-    }
-
-    if (!moved)
-    {
-      // Give new pixels a chance to fall.
-      pixelStates[pixelKey].Velocity += gravity;
-    }
-
-    if (!moved && !canPixelFall(pixelKey))
-    {
-      pixelsToErase.insert(pixelKey);
-      updateLandedPixelsColumnTops(pixelKey);
-    }
-  }
+  // Wait for task to complete.
+  xSemaphoreTake(xSemaphore2, portMAX_DELAY);
 
   for (const auto &key : pixelsToErase)
   {
