@@ -23,9 +23,9 @@
 // static const int8_t PIXEL_WIDTH = 3;
 // uint8_t percentInputFill = 20;
 // uint8_t inputWidth = 6;
-static const int8_t PIXEL_WIDTH = 2;
+static const int8_t PIXEL_WIDTH = 1;
 static const uint8_t percentInputFill = 10;
-static const uint8_t inputWidth = 8;
+static const uint8_t inputWidth = 10;
 static const uint8_t gravity = 1;
 static const unsigned long maxFps = 30;
 static const unsigned long colorChangeFrequencyMs = 250;
