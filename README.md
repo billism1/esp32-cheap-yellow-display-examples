@@ -25,3 +25,11 @@ For more information on this CYD and its variants, more example projects, mods, 
 \* The "Fluid Simulation" project was copied from [github.com/colonelwatch/ESP32-fluid-simulation/](https://github.com/colonelwatch/ESP32-fluid-simulation/). I modified it to work on my CYD device and converted it to a Platform.io project.
 
 \*\* The "Particles" project was copied from [github.com/doctorpartlow/esp32s3lilygoanimations](https://github.com/doctorpartlow/esp32s3lilygoanimations/blob/main/particles.ino). I fixed a couple minor bugs, modified it to work on the CYD, and converted it to a Platform.io project.
+
+---
+
+## Some example videos
+
+[Sand](projects/sand-multi-task)
+
+[![Sand Simulation on the Cheap Yellow Display (CYD) ESP32 MCU + Display](https://img.youtube.com/vi/j8XRMEEZ0gM/0.jpg)](https://www.youtube.com/watch?v=j8XRMEEZ0gM)
