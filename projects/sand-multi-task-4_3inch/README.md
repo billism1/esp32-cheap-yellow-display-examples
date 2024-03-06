@@ -1,4 +1,8 @@
-# Sand (Multi-Task)
+# Sand (Multi-Task) 4.3 Inch
+
+Modified from the prior [Sand (Multi-Task) project](../sand-multi-task). This code targets the 4.3 inch display, with capacitive touch, version of the CYD - the ESP32-8048S043C.
+
+### Description from the prior [Sand (Multi-Task) Project](../sand-multi-task)
 
 I created this project as a copy of my [Sand project](../sand) initially and then added multi-tasking to take advantage of the dual-core CPU in the ESP32. This was my first time trying out parallelization programming on an MCU and with FreeRTOS.
 

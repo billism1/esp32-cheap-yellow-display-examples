@@ -12,10 +12,11 @@ For more information on this CYD and its variants, more example projects, mods, 
 
 ---
 
-# The projects
+# The Projects
 
 - [Sand](projects/sand) A falling sand with new sand/pixels changing color over time, falling from the touchscreen inpout point.
 - [Sand (Multi-Task)](projects/sand-multi-task) I copied the sand project above and then modified it with parallelization to take advantage of the dual-core ESP32 with a performance boost.
+- [Sand (Multi-Task) 4.3 Inch](projects/sand-multi-task-4_3inch) Modified from the prior [Sand (Multi-Task) project](../sand-multi-task). This code targets the 4.3 inch display, with capacitive touch, version of the CYD - the ESP32-8048S043C.
 - [Paint](projects/paint) A simple spray paint program with the new paint changing color over time.
 - [Fluid Simulation *](projects/fluid-simulation) A simple (though not state-of-the-art) C++ implementation of Jos Stam's fluid simulation method
 - [Particles **](projects/particles) Particles orbiting around a point of center mass.
