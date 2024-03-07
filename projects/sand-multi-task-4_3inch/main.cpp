@@ -17,8 +17,8 @@ static const uint8_t percentInputFill = 15;
 static const int32_t inputWidth = 4;
 static const uint8_t gravity = 1;
 static const unsigned long maxFps = 30;
-static const unsigned long colorChangeFrequencyMs = 250;
-static const unsigned long millisToChangeAllColors = 150;
+static const unsigned long millisToChangeInputColor = 60;
+static const unsigned long millisToChangeAllColors = 30;
 // End "subjective" params.
 /////////////////////////////////////////////////////
 
@@ -29,7 +29,7 @@ static const int32_t SCALED_COLS = NATIVE_COLS / PIXEL_WIDTH;
 
 int16_t BACKGROUND_COLOR = TFT_BLACK;
 
-LGFX display;
+static LGFX display;                 // Instance of LGFX
 
 // 16-bit color representation:
 //------------------------------------
@@ -39,9 +39,9 @@ LGFX display;
 //
 // ((31 << 11) | (62 << 5) | 0) = 65472 = 0xffc0
 
-//uint8_t newRgbValues[3] = { 0x31, 0x00, 0x00 }; // red, green, blue
-uint8_t newRgbValues[3] = { 0x1F, 0x00, 0x00 }; // red, green, blue
-uint8_t newKValue = 0;
+// uint8_t newRgbValues[3] = { 0x31, 0x00, 0x00 }; // red, green, blue
+uint8_t newRgbValues[3] = {0x1F, 0x00, 0x00}; // red, green, blue
+uint8_t newKValue = 4;
 
 unsigned long colorChangeTime = 0;
 unsigned long allColorChangeTime = 0;
@@ -513,7 +513,7 @@ void loop()
   // Change the color of the pixels over time
   if (colorChangeTime < millis())
   {
-    colorChangeTime = millis() + colorChangeFrequencyMs;
+    colorChangeTime = millis() + millisToChangeInputColor;
     setNextColor(newRgbValues, newKValue);
   }
 
