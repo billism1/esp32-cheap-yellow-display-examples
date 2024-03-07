@@ -11,10 +11,11 @@
 // static const int8_t PIXEL_WIDTH = 3;
 // uint8_t percentInputFill = 20;
 // uint8_t inputWidth = 6;
-static const int32_t PIXEL_WIDTH = 12;
+static const int32_t PIXEL_WIDTH = 10;
 static const bool randomShapesAsPixels = true;
+static const uint8_t pixelPadding = 1;
 static const uint8_t percentInputFill = 15;
-static const int32_t inputWidth = 4;
+static const int32_t inputWidth = 10;
 static const uint8_t gravity = 1;
 static const unsigned long maxFps = 30;
 static const unsigned long millisToChangeInputColor = 60;
@@ -29,7 +30,7 @@ static const int32_t SCALED_COLS = NATIVE_COLS / PIXEL_WIDTH;
 
 int16_t BACKGROUND_COLOR = TFT_BLACK;
 
-static LGFX display;                 // Instance of LGFX
+static LGFX display; // Instance of LGFX
 
 // 16-bit color representation:
 //------------------------------------
@@ -135,7 +136,7 @@ void drawScaledPixel(int32_t x, int32_t y, uint8_t *rgbValues, uint8_t shape)
   int32_t scaledXCol = x * PIXEL_WIDTH;
   int32_t scaledYRow = y * PIXEL_WIDTH;
 
-  //long map(long x, long in_min, long in_max, long out_min, long out_max)
+  // long map(long x, long in_min, long in_max, long out_min, long out_max)
   uint8_t r = map(rgbValues[0], 0, 31, 0, 255);
   uint8_t g = map(rgbValues[1], 0, 63, 0, 255);
   uint8_t b = map(rgbValues[2], 0, 31, 0, 255);
@@ -146,7 +147,7 @@ void drawScaledPixel(int32_t x, int32_t y, uint8_t *rgbValues, uint8_t shape)
   // Serial.println();
 
   // Prevent edges of shapres overlapping.
-  auto pixelWidthAdjustment = max(1, PIXEL_WIDTH - 1);
+  auto pixelWidthAdjustment = max(1, PIXEL_WIDTH - pixelPadding);
 
   if (shape == 0)
   {
@@ -277,8 +278,7 @@ void movePixels(std::unordered_map<uint64_t, PointState>::iterator _pixelStatesI
       continue;
     }
 
-    uint8_t thisPixelRgbValues[3];
-    setColor(thisPixelRgbValues, thisPixelState.RgbValues[0], thisPixelState.RgbValues[1], thisPixelState.RgbValues[2]);
+    uint8_t *thisPixelRgbValues = thisPixelState.RgbValues;
 
     auto pixelColorState = thisPixelState.ColorState;
     auto pixelVelocity = thisPixelState.Velocity;
@@ -316,64 +316,58 @@ void movePixels(std::unordered_map<uint64_t, PointState>::iterator _pixelStatesI
         belowXY_B = getXYCombinedValue(belowXY_B_XCol, yRowPos);
       }
 
-      if (isPixelSlotAvailable(belowXY) && pixelStatesToAdd.find(belowXY) == pixelStatesToAdd.end())
+      if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
       {
-        //    This pixel will go straight down.
-        pixelStatesToAdd[belowXY] = PointState(pixelXCol, yRowPos, GRID_STATE_FALLING, pixelColorState, pixelVelocity + gravity, pixelShape);
-        setColor(&(pixelStatesToAdd[belowXY].RgbValues[0]), thisPixelRgbValues[0], thisPixelRgbValues[1], thisPixelRgbValues[2]);
-
-        if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+        if (isPixelSlotAvailable(belowXY) && pixelStatesToAdd.find(belowXY) == pixelStatesToAdd.end())
         {
+          //    This pixel will go straight down.
+          pixelStatesToAdd[belowXY] = PointState(pixelXCol, yRowPos, GRID_STATE_FALLING, pixelColorState, pixelVelocity + gravity, pixelShape);
+          setColor(&(pixelStatesToAdd[belowXY].RgbValues[0]), thisPixelRgbValues[0], thisPixelRgbValues[1], thisPixelRgbValues[2]);
+
           clearScaledPixel(pixelXCol, pixelYRow);                              // Out with the old.
           drawScaledPixel(pixelXCol, yRowPos, thisPixelRgbValues, pixelShape); // In with the new.
 
           pixelsToErase.insert(pixelKey);
           pixelsToErase.erase(belowXY);
 
+          moved = true;
           xSemaphoreGive(xStateMutex);
+          break;
         }
-
-        moved = true;
-        break;
-      }
-      else if (isPixelSlotAvailable(belowXY_A) && pixelStatesToAdd.find(belowXY_A) == pixelStatesToAdd.end())
-      {
-        //  This pixel will fall to side A (right)
-        pixelStatesToAdd[belowXY_A] = PointState(belowXY_A_XCol, yRowPos, GRID_STATE_FALLING, pixelColorState, pixelVelocity + gravity, pixelShape);
-        setColor(&(pixelStatesToAdd[belowXY_A].RgbValues[0]), thisPixelRgbValues[0], thisPixelRgbValues[1], thisPixelRgbValues[2]);
-
-        if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+        else if (isPixelSlotAvailable(belowXY_A) && pixelStatesToAdd.find(belowXY_A) == pixelStatesToAdd.end())
         {
+          //  This pixel will fall to side A (right)
+          pixelStatesToAdd[belowXY_A] = PointState(belowXY_A_XCol, yRowPos, GRID_STATE_FALLING, pixelColorState, pixelVelocity + gravity, pixelShape);
+          setColor(&(pixelStatesToAdd[belowXY_A].RgbValues[0]), thisPixelRgbValues[0], thisPixelRgbValues[1], thisPixelRgbValues[2]);
+
           clearScaledPixel(pixelXCol, pixelYRow);                                   // Out with the old.
           drawScaledPixel(belowXY_A_XCol, yRowPos, thisPixelRgbValues, pixelShape); // In with the new.
 
           pixelsToErase.insert(pixelKey);
           pixelsToErase.erase(belowXY_A);
+
+          moved = true;
           xSemaphoreGive(xStateMutex);
+          break;
         }
-
-        moved = true;
-        break;
-      }
-      else if (isPixelSlotAvailable(belowXY_B) && pixelStatesToAdd.find(belowXY_B) == pixelStatesToAdd.end())
-      {
-        //  This pixel will fall to side B (left)
-        pixelStatesToAdd[belowXY_B] = PointState(belowXY_B_XCol, yRowPos, GRID_STATE_FALLING, pixelColorState, pixelVelocity + gravity, pixelShape);
-        setColor(&(pixelStatesToAdd[belowXY_B].RgbValues[0]), thisPixelRgbValues[0], thisPixelRgbValues[1], thisPixelRgbValues[2]);
-
-        if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+        else if (isPixelSlotAvailable(belowXY_B) && pixelStatesToAdd.find(belowXY_B) == pixelStatesToAdd.end())
         {
+          //  This pixel will fall to side B (left)
+          pixelStatesToAdd[belowXY_B] = PointState(belowXY_B_XCol, yRowPos, GRID_STATE_FALLING, pixelColorState, pixelVelocity + gravity, pixelShape);
+          setColor(&(pixelStatesToAdd[belowXY_B].RgbValues[0]), thisPixelRgbValues[0], thisPixelRgbValues[1], thisPixelRgbValues[2]);
+
           clearScaledPixel(pixelXCol, pixelYRow);                                   // Out with the old.
           drawScaledPixel(belowXY_B_XCol, yRowPos, thisPixelRgbValues, pixelShape); // In with the new.
 
           pixelsToErase.insert(pixelKey);
           pixelsToErase.erase(belowXY_B);
 
+          moved = true;
           xSemaphoreGive(xStateMutex);
+          break;
         }
 
-        moved = true;
-        break;
+        xSemaphoreGive(xStateMutex);
       }
     }
 
@@ -382,17 +376,18 @@ void movePixels(std::unordered_map<uint64_t, PointState>::iterator _pixelStatesI
       thisPixelState.Velocity += gravity;
     }
 
-    if (!moved && !canPixelFall(pixelKey))
+    if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
     {
-      if (xSemaphoreTake(xStateMutex, portMAX_DELAY))
+      if (!moved && !canPixelFall(pixelKey))
       {
         thisPixelState.State = GRID_STATE_LANDED;
         landedPixelStates[pixelKey] = thisPixelState;
 
         pixelsToErase.insert(pixelKey);
         updateLandedPixelsColumnTops(pixelKey);
-        xSemaphoreGive(xStateMutex);
       }
+
+      xSemaphoreGive(xStateMutex);
     }
   }
 }
@@ -418,7 +413,7 @@ void task1(void *pvParameters)
 
 void setup()
 {
-  //Serial.begin(115200);
+  // Serial.begin(115200);
 
   Serial.println("Init display...");
   display.init();
@@ -484,7 +479,7 @@ void loop()
     return;
   }
 
-  //Serial.println("Looping...");
+  // Serial.println("Looping...");
 
   // Get frame rate.
   fps = 1000 / max(currentMillis - lastMillis, 1UL);
