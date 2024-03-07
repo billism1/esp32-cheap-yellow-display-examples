@@ -11,13 +11,13 @@
 // static const int8_t PIXEL_WIDTH = 3;
 // uint8_t percentInputFill = 20;
 // uint8_t inputWidth = 6;
-static const int32_t PIXEL_WIDTH = 3;
-static const bool randomShapesAsPixels = false;
-static const uint8_t pixelPadding = 0;
+static const int32_t PIXEL_WIDTH = 8;
+static const bool randomShapesAsPixels = true;
+static const uint8_t pixelPadding = 1;
 static const uint8_t percentInputFill = 15;
-static const int32_t inputWidth = 10;
+static const int32_t inputWidth = 5;
 static const uint8_t gravity = 1;
-static const bool changeFallenPixelColors = false;
+static const bool changeFallenPixelColors = true;
 static const unsigned long maxFps = 30;
 static const unsigned long millisToChangeInputColor = 60;
 static const unsigned long millisToChangeAllColors = 30;
@@ -506,18 +506,19 @@ void loop()
 
   lastMillis = currentMillis;
 
-  // Change the color of the pixels over time
-  if (colorChangeTime < millis())
-  {
-    colorChangeTime = millis() + millisToChangeInputColor;
-    setNextColor(newRgbValues, newKValue);
-  }
-
   // Change the color of the fallen pixels over time
   if (changeFallenPixelColors && allColorChangeTime < millis())
   {
     allColorChangeTime = millis() + millisToChangeAllColors;
     setNextColorAll();
+    setNextColor(newRgbValues, newKValue);
+  }
+  
+  // Change the color of the pixels over time
+  if (colorChangeTime < millis())
+  {
+    colorChangeTime = millis() + millisToChangeInputColor;
+    setNextColor(newRgbValues, newKValue);
   }
 
   // Handle touch.
