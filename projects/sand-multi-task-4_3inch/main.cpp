@@ -11,12 +11,13 @@
 // static const int8_t PIXEL_WIDTH = 3;
 // uint8_t percentInputFill = 20;
 // uint8_t inputWidth = 6;
-static const int32_t PIXEL_WIDTH = 10;
-static const bool randomShapesAsPixels = true;
-static const uint8_t pixelPadding = 1;
+static const int32_t PIXEL_WIDTH = 3;
+static const bool randomShapesAsPixels = false;
+static const uint8_t pixelPadding = 0;
 static const uint8_t percentInputFill = 15;
 static const int32_t inputWidth = 10;
 static const uint8_t gravity = 1;
+static const bool changeFallenPixelColors = false;
 static const unsigned long maxFps = 30;
 static const unsigned long millisToChangeInputColor = 60;
 static const unsigned long millisToChangeAllColors = 30;
@@ -513,7 +514,7 @@ void loop()
   }
 
   // Change the color of the fallen pixels over time
-  if (allColorChangeTime < millis())
+  if (changeFallenPixelColors && allColorChangeTime < millis())
   {
     allColorChangeTime = millis() + millisToChangeAllColors;
     setNextColorAll();
