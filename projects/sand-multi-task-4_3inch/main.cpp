@@ -59,9 +59,12 @@ std::unordered_map<uint32_t, uint32_t> landedPixelsColumnTops; // [X]:[Y]  // Fo
 static std::unordered_map<uint64_t, PointState> pixelStatesToAdd;
 static std::unordered_set<uint64_t> pixelsToErase;
 
+SemaphoreHandle_t xDisplayMutex = NULL;
 SemaphoreHandle_t xStateMutex = NULL;
 SemaphoreHandle_t xSemaphore1 = NULL;
 SemaphoreHandle_t xSemaphore2 = NULL;
+SemaphoreHandle_t xSemaphore3 = NULL;
+SemaphoreHandle_t xSemaphore4 = NULL;
 
 long lastMillis = 0;
 int fps = 0;
@@ -114,12 +117,16 @@ void clearScaledPixel(int32_t x, int32_t y)
   int32_t scaledXCol = x * PIXEL_WIDTH;
   int32_t scaledYRow = y * PIXEL_WIDTH;
 
-  display.fillRect(scaledXCol, scaledYRow, PIXEL_WIDTH, PIXEL_WIDTH, BACKGROUND_COLOR);
+  if (xSemaphoreTake(xDisplayMutex, portMAX_DELAY))
+  {
+    display.fillRect(scaledXCol, scaledYRow, PIXEL_WIDTH, PIXEL_WIDTH, BACKGROUND_COLOR);
+    xSemaphoreGive(xDisplayMutex);
+  }
 }
 
 uint8_t getRandomShape()
 {
-  return random(0, 7);
+  return random(0, 8);
 }
 
 uint8_t getPixelShape()
@@ -142,85 +149,93 @@ void drawScaledPixel(int32_t x, int32_t y, uint8_t *rgbValues, uint8_t shape)
   uint8_t g = map(rgbValues[1], 0, 63, 0, 255);
   uint8_t b = map(rgbValues[2], 0, 31, 0, 255);
 
-  display.setColor(r, g, b);
+  if (xSemaphoreTake(xDisplayMutex, portMAX_DELAY))
+  {
+    display.setColor(r, g, b);
 
-  // Serial.printf("drawScaledPixel: color:  %02hhX %02hhX %02hhX", r, g, b);
-  // Serial.println();
+    // Serial.printf("drawScaledPixel: color:  %02hhX %02hhX %02hhX", r, g, b);
+    // Serial.println();
 
-  // Prevent edges of shapres overlapping.
-  auto pixelWidthAdjustment = max(1, PIXEL_WIDTH - pixelPadding);
+    // Prevent edges of shapres overlapping.
+    auto pixelWidthAdjustment = max(1, PIXEL_WIDTH - pixelPadding);
 
-  if (shape == 0)
-  {
-    // Filled (square) rectangle.
-    display.fillRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment);
-    // display.fillRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment, color);
-  }
-  else if (shape == 1)
-  {
-    // Rectangle (square) outline.
-    display.drawRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment);
-    // display.drawRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment, color);
-  }
-  else if (shape == 2)
-  {
-    // Circle outline.
-    display.drawCircle(scaledXCol + (pixelWidthAdjustment / 2), scaledYRow + (pixelWidthAdjustment / 2), (pixelWidthAdjustment / 2));
-  }
-  else if (shape == 3)
-  {
-    // Filled circle.
-    display.fillCircle(scaledXCol + (pixelWidthAdjustment / 2), scaledYRow + (pixelWidthAdjustment / 2), pixelWidthAdjustment / 2);
-  }
-  else if (shape == 4)
-  {
-    // Triangle outline "pointing" down.
-    display.drawTriangle(scaledXCol, scaledYRow,
-                         scaledXCol + pixelWidthAdjustment, scaledYRow,
-                         scaledXCol + (pixelWidthAdjustment / 2),
-                         scaledYRow + pixelWidthAdjustment);
-  }
-  else if (shape == 5)
-  {
-    // Triangle outline "pointing" up.
-    display.drawTriangle(scaledXCol, scaledYRow + pixelWidthAdjustment,
-                         scaledXCol + pixelWidthAdjustment, scaledYRow + pixelWidthAdjustment,
-                         scaledXCol + (pixelWidthAdjustment / 2),
-                         scaledYRow);
-  }
-  else if (shape == 6)
-  {
-    // Filled triangle "pointing" down.
-    display.fillTriangle(scaledXCol, scaledYRow,
-                         scaledXCol + pixelWidthAdjustment, scaledYRow,
-                         scaledXCol + (pixelWidthAdjustment / 2), scaledYRow + pixelWidthAdjustment);
-  }
-  else if (shape == 7)
-  {
-    // Filled triangle "pointing" up.
-    display.fillTriangle(scaledXCol, scaledYRow + pixelWidthAdjustment,
-                         scaledXCol + pixelWidthAdjustment, scaledYRow + pixelWidthAdjustment,
-                         scaledXCol + (pixelWidthAdjustment / 2), scaledYRow);
-  }
-  else
-  {
-    // Filled (square) rectangle.
-    display.fillRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment);
+    if (shape == 0)
+    {
+      // Filled (square) rectangle.
+      display.fillRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment);
+    }
+    else if (shape == 1)
+    {
+      // Rectangle (square) outline.
+      display.drawRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment);
+    }
+    else if (shape == 2)
+    {
+      // Circle outline.
+      display.drawCircle(scaledXCol + (pixelWidthAdjustment / 2), scaledYRow + (pixelWidthAdjustment / 2), pixelWidthAdjustment / 2);
+    }
+    else if (shape == 3)
+    {
+      // Filled circle.
+      display.fillCircle(scaledXCol + (pixelWidthAdjustment / 2), scaledYRow + (pixelWidthAdjustment / 2), pixelWidthAdjustment / 2);
+    }
+    else if (shape == 4)
+    {
+      // Triangle outline "pointing" down.
+      display.drawTriangle(scaledXCol, scaledYRow,
+                           scaledXCol + pixelWidthAdjustment, scaledYRow,
+                           scaledXCol + (pixelWidthAdjustment / 2),
+                           scaledYRow + pixelWidthAdjustment);
+    }
+    else if (shape == 5)
+    {
+      // Filled triangle "pointing" down.
+      display.fillTriangle(scaledXCol, scaledYRow,
+                           scaledXCol + pixelWidthAdjustment, scaledYRow,
+                           scaledXCol + (pixelWidthAdjustment / 2),
+                           scaledYRow + pixelWidthAdjustment);
+    }
+    else if (shape == 6)
+    {
+      // Triangle outline "pointing" up.
+      display.drawTriangle(scaledXCol, scaledYRow + pixelWidthAdjustment,
+                           scaledXCol + pixelWidthAdjustment, scaledYRow + pixelWidthAdjustment,
+                           scaledXCol + (pixelWidthAdjustment / 2),
+                           scaledYRow);
+    }
+    else if (shape == 7)
+    {
+      // Filled triangle "pointing" up.
+      display.fillTriangle(scaledXCol, scaledYRow + pixelWidthAdjustment,
+                           scaledXCol + pixelWidthAdjustment, scaledYRow + pixelWidthAdjustment,
+                           scaledXCol + (pixelWidthAdjustment / 2),
+                           scaledYRow);
+    }
+    else
+    {
+      // Filled (square) rectangle.
+      display.fillRect(scaledXCol, scaledYRow, pixelWidthAdjustment, pixelWidthAdjustment);
+    }
+
+    xSemaphoreGive(xDisplayMutex);
   }
 }
 
-void setNextColorAll()
+void setNextColorAll(std::unordered_map<uint64_t, PointState>::iterator landedPixelStatesBegin,
+                     std::unordered_map<uint64_t, PointState>::iterator landedPixelStatesEnd,
+                     std::unordered_map<uint64_t, PointState>::iterator pixelStatesBegin,
+                     std::unordered_map<uint64_t, PointState>::iterator pixelStatesEnd)
 {
-  for (auto &keyValue : landedPixelStates)
+  for (auto iter = landedPixelStatesBegin; iter != landedPixelStatesEnd; iter++)
   {
-    setNextColor(keyValue.second.RgbValues, keyValue.second.ColorState);
-    drawScaledPixel(keyValue.second.XCol, keyValue.second.YRow, keyValue.second.RgbValues, keyValue.second.Shape);
+    setNextColor(iter->second.RgbValues, iter->second.ColorState);
+    drawScaledPixel(iter->second.XCol, iter->second.YRow, iter->second.RgbValues, iter->second.Shape);
   }
 
-  for (auto &keyValue : pixelStates)
+  for (auto iter = pixelStatesBegin; iter != pixelStatesEnd; iter++)
   {
-    setNextColor(keyValue.second.RgbValues, keyValue.second.ColorState);
-    drawScaledPixel(keyValue.second.XCol, keyValue.second.YRow, keyValue.second.RgbValues, keyValue.second.Shape);
+    setNextColor(iter->second.RgbValues, iter->second.ColorState);
+    drawScaledPixel(iter->second.XCol, iter->second.YRow, iter->second.RgbValues, iter->second.Shape);
   }
 }
 
@@ -393,9 +408,10 @@ void movePixels(std::unordered_map<uint64_t, PointState>::iterator _pixelStatesI
   }
 }
 
+// Task for moving the falling "pixels".
 void task1(void *pvParameters)
 {
-  auto coreId = xPortGetCoreID();
+  // auto coreId = xPortGetCoreID();
 
   while (1)
   {
@@ -408,6 +424,30 @@ void task1(void *pvParameters)
       movePixels(pixelStatesMid, pixelStatesEnd);
 
       xSemaphoreGive(xSemaphore2); // release the mutex
+    }
+  }
+}
+
+// Task for changing all "pixel" colors.
+void task2(void *pvParameters)
+{
+  // auto coreId = xPortGetCoreID();
+
+  while (1)
+  {
+    if (xSemaphoreTake(xSemaphore3, portMAX_DELAY))
+    {
+      auto landedPixelStatesBegin = landedPixelStates.begin();
+      auto landedPixelStatesMid = std::next(landedPixelStatesBegin, (landedPixelStates.size() / 2));
+      auto landedPixelStatesEnd = landedPixelStates.end();
+
+      auto pixelStatesBegin = pixelStates.begin();
+      auto pixelStatesMid = std::next(pixelStatesBegin, (pixelStates.size() / 2));
+      auto pixelStatesEnd = pixelStates.end();
+
+      setNextColorAll(landedPixelStatesMid, landedPixelStatesEnd, pixelStatesMid, pixelStatesEnd);
+
+      xSemaphoreGive(xSemaphore4); // release the mutex
     }
   }
 }
@@ -452,9 +492,12 @@ void setup()
 
   // Serial.printf("Viewport dimensions (W x H): %i x %i\n", viewportWidth, viewportHeight);
 
+  xDisplayMutex = xSemaphoreCreateMutex();
   xStateMutex = xSemaphoreCreateMutex();
   xSemaphore1 = xSemaphoreCreateCounting(1, 0);
   xSemaphore2 = xSemaphoreCreateCounting(1, 0);
+  xSemaphore3 = xSemaphoreCreateCounting(1, 0);
+  xSemaphore4 = xSemaphoreCreateCounting(1, 0);
 
   xTaskCreatePinnedToCore(
       task1,   // Function to implement the task
@@ -462,8 +505,18 @@ void setup()
       4096,    // Stack size in words
       NULL,    // Task input parameter
       1,       // Priority of the task
-      NULL,    // Task handle.
-      0        // Core where the task should run
+      NULL,    // Task handle
+      0        // CPU core to pin to
+  );
+
+  xTaskCreatePinnedToCore(
+      task2,   // Function to implement the task
+      "task2", // Name of the task
+      4096,    // Stack size in words
+      NULL,    // Task input parameter
+      1,       // Priority of the task
+      NULL,    // Task handle
+      0        // CPU core to pin to
   );
 
   delay(500);
@@ -510,10 +563,24 @@ void loop()
   if (changeFallenPixelColors && allColorChangeTime < millis())
   {
     allColorChangeTime = millis() + millisToChangeAllColors;
-    setNextColorAll();
+
+    auto landedPixelStatesBegin = landedPixelStates.begin();
+    auto landedPixelStatesMid = std::next(landedPixelStatesBegin, (landedPixelStates.size() / 2));
+
+    auto pixelStatesBegin = pixelStates.begin();
+    auto pixelStatesMid = std::next(pixelStatesBegin, (pixelStates.size() / 2));
+
+    // Start task and proceed.
+    xSemaphoreGive(xSemaphore3);
+
+    setNextColorAll(landedPixelStatesBegin, landedPixelStatesMid, pixelStatesBegin, pixelStatesMid);
+
+    // Wait for task to complete.
+    xSemaphoreTake(xSemaphore4, portMAX_DELAY);
+
     setNextColor(newRgbValues, newKValue);
   }
-  
+
   // Change the color of the pixels over time
   if (colorChangeTime < millis())
   {
