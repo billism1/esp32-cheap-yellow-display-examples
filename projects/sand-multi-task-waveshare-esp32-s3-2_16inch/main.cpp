@@ -37,8 +37,12 @@ uint16_t BACKGROUND_COLOR = RGB565_BLACK;
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
     LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 
-Arduino_CO5300 *gfx = new Arduino_CO5300(
-    bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 0, 0, 0, 0);
+// CO5300 RAM is 480x480; panel is 466x466 centered with col offset 6.
+Arduino_CO5300 *panel = new Arduino_CO5300(
+    bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
+
+// Offscreen framebuffer; one bulk flush per frame instead of per-grain QSPI writes.
+Arduino_Canvas *gfx = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, panel);
 
 TouchDrvCST92xx touch;
 int16_t touchPointsX[5];
@@ -468,11 +472,15 @@ void setup()
   }
 
   Serial.println("Init display...");
-  gfx->begin();
-  gfx->setBrightness(200);
+  if (!gfx->begin())
+  {
+    Serial.println("Canvas/panel init failed (framebuffer alloc likely OOM — needs PSRAM).");
+  }
+  panel->setBrightness(200);
   // MADCTL: orient panel to match touch (matches Waveshare official Arduino examples).
   bus->writeC8D8(0x36, 0xA0);
   gfx->fillScreen(BACKGROUND_COLOR);
+  gfx->flush();
 
   colorChangeTime = millis() + 1000;
 
@@ -633,5 +641,11 @@ void loop()
   {
     pixelStates[keyVal.first] = PointState(keyVal.second.XCol, keyVal.second.YRow, keyVal.second.State, keyVal.second.ColorState, keyVal.second.Velocity, keyVal.second.Shape);
     setColor(pixelStates[keyVal.first].RgbValues, keyVal.second.RgbValues[0], keyVal.second.RgbValues[1], keyVal.second.RgbValues[2]);
+  }
+
+  if (xSemaphoreTake(xDisplayMutex, portMAX_DELAY))
+  {
+    gfx->flush();
+    xSemaphoreGive(xDisplayMutex);
   }
 }
