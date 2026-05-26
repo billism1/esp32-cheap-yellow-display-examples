@@ -14,8 +14,8 @@
 #define LCD_SCLK  38
 #define LCD_RESET  2
 #define LCD_CS    12
-#define LCD_WIDTH  466
-#define LCD_HEIGHT 466
+#define LCD_WIDTH  480
+#define LCD_HEIGHT 480
 
 // I2C (shared by touch + IMU + AXP2101 PMIC)
 #define IIC_SDA 15

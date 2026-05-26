@@ -37,9 +37,10 @@ uint16_t BACKGROUND_COLOR = RGB565_BLACK;
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
     LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 
-// CO5300 RAM is 480x480; panel is 466x466 centered with col offset 6.
+// CO5300 RAM is 480x480; panel exposes full 480x480 visible region (panel "2.16" 466x466 spec is
+// the active dot count, but the visible window covers all of RAM — no offset needed).
 Arduino_CO5300 *panel = new Arduino_CO5300(
-    bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 6, 0, 0, 0);
+    bus, LCD_RESET, 0, LCD_WIDTH, LCD_HEIGHT, 0, 0, 0, 0);
 
 // Offscreen framebuffer; one bulk flush per frame instead of per-grain QSPI writes.
 Arduino_Canvas *gfx = new Arduino_Canvas(LCD_WIDTH, LCD_HEIGHT, panel);
