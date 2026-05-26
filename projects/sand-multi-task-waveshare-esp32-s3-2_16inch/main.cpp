@@ -32,7 +32,7 @@ static const int32_t NATIVE_COLS = LCD_WIDTH;
 static const int32_t SCALED_ROWS = NATIVE_ROWS / PIXEL_WIDTH;
 static const int32_t SCALED_COLS = NATIVE_COLS / PIXEL_WIDTH;
 
-uint16_t BACKGROUND_COLOR = BLACK;
+uint16_t BACKGROUND_COLOR = RGB565_BLACK;
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
     LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -161,7 +161,7 @@ void drawScaledPixel(int32_t x, int32_t y, uint8_t *rgbValues, uint8_t shape)
   if (xSemaphoreTake(xDisplayMutex, portMAX_DELAY))
   {
     // Prevent edges of shapes overlapping.
-    auto pixelWidthAdjustment = max(1, PIXEL_WIDTH - pixelPadding);
+    auto pixelWidthAdjustment = max((int32_t)1, PIXEL_WIDTH - pixelPadding);
 
     if (shape == 0)
     {
@@ -536,7 +536,7 @@ void loop()
   // Display frame rate
   if (xSemaphoreTake(xDisplayMutex, portMAX_DELAY))
   {
-    gfx->setTextColor(WHITE, BLACK);
+    gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
     gfx->setCursor(0, 0);
     gfx->print(fpsStringBuffer);
     xSemaphoreGive(xDisplayMutex);
